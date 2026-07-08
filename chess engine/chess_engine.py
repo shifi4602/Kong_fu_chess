@@ -1,15 +1,28 @@
+from typing import List, Dict, Optional
 from types_and_constants import Color, PieceType, Position, Piece
-from movement_strategies import StrategyFactory
+from validators import (
+    MoveValidator, RedirectValidator, CooldownValidator, 
+    PieceMovementValidator, ConcurrencyValidator
+)
 
 class ChessEngine:
-    def __init__(self, cooldown_duration: int = 5000, travel_duration: int = 2000):
-        self.board_matrix = []
-        self.cooldown_matrix = []
-        self.current_time = 0
-        self.cooldown_duration = cooldown_duration
-        self.travel_duration = travel_duration # time it takes for a piece to "travel" to its new position
-        self.selected_pos = None
-        self._pending_moves = [] # A queue for the moves that are pending
+    # Change: update default travel_duration to 1000ms
+    def __init__(self, cooldown_duration: int = 5000, travel_duration: int = 1000):
+        self.board_matrix: List[List[Optional[Piece]]] = []
+        self.cooldown_matrix: List[List[int]] = []
+        self.current_time: int = 0
+        self.cooldown_duration: int = cooldown_duration
+        self.travel_duration: int = travel_duration
+        self.selected_pos: Optional[Position] = None
+        self._pending_moves: List[Dict] = []
+        
+        # Inject game rules (Dependency Injection), including the new concurrency rule
+        self._validators: List[MoveValidator] = [
+            RedirectValidator(),
+            CooldownValidator(),
+            PieceMovementValidator(),
+            ConcurrencyValidator()
+        ]
 
     def add_board_row(self, row_pieces: list):
         self.board_matrix.append(row_pieces)
@@ -20,8 +33,13 @@ class ChessEngine:
 
     def advance_time(self, ms: int):
         self.current_time += ms
-        # Update the board status immediately with the time advancement.
         self._update_game_state()
+
+    def _is_piece_moving(self, pos: Position) -> bool:
+        for move in self._pending_moves:
+            if move['src'] == pos:
+                return True
+        return False
 
     def handle_click_position(self, pos: Position):
         num_rows = len(self.board_matrix)
@@ -33,45 +51,45 @@ class ChessEngine:
         target_piece = self.board_matrix[pos.row][pos.col]
 
         if self.selected_pos is None:
-            if target_piece is not None:
+            if target_piece is not None and not self._is_piece_moving(pos):
                 self.selected_pos = pos
         else:
             selected_piece = self.board_matrix[self.selected_pos.row][self.selected_pos.col]
             
             if target_piece is not None and target_piece.color == selected_piece.color:
-                self.selected_pos = pos
+                if not self._is_piece_moving(pos):
+                    self.selected_pos = pos
+                else:
+                    self.selected_pos = None
             else:
-                if self.current_time >= self.cooldown_matrix[self.selected_pos.row][self.selected_pos.col]:
-                    strategy = StrategyFactory.get_strategy(selected_piece.piece_type)
-                    if strategy and strategy.is_valid(self.board_matrix, self.selected_pos, pos):
-                        
-                        # write the move to the pending moves queue instead of updating the board immediately
-                        arrival_time = self.current_time + self.travel_duration
-                        self._pending_moves.append({
-                            'src': self.selected_pos,
-                            'dst': pos,
-                            'piece': selected_piece,
-                            'arrival_time': arrival_time
-                        })
-                        
-                        # Cooldowns are updated immediately upon departure
-                        self.cooldown_matrix[pos.row][pos.col] = arrival_time + self.cooldown_duration
-                        self.cooldown_matrix[self.selected_pos.row][self.selected_pos.col] = 0
+                src = self.selected_pos
+                dst = pos
+                
+                if all(v.validate(self, src, dst) for v in self._validators):
+                    arrival_time = self.current_time + self.travel_duration
+                    self._pending_moves.append({
+                        'src': src,
+                        'dst': dst,
+                        'piece': selected_piece,
+                        'arrival_time': arrival_time
+                    })
+                    
+                    # Electronic lock until the exact arrival time
+                    self.cooldown_matrix[dst.row][dst.col] = arrival_time
+                    self.cooldown_matrix[src.row][src.col] = 0
                         
                 self.selected_pos = None
 
     def _update_game_state(self):
-        """Scanning and executing moves whose arrival time has arrived (Lazy Evaluation)."""
         still_pending = []
         for move in self._pending_moves:
+            # שימוש ב >= מבטיח סנכרון מדויק של זמנים מול ה-VPL
             if self.current_time >= move['arrival_time']:
                 src = move['src']
                 dst = move['dst']
                 piece = move['piece']
                 
-                # Apply the physical change to the board
                 self.board_matrix[dst.row][dst.col] = piece
-                # Delete from the source slot only if the tool is still there and hasn't moved again in the meantime
                 if self.board_matrix[src.row][src.col] == piece:
                     self.board_matrix[src.row][src.col] = None
             else:

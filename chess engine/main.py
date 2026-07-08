@@ -42,48 +42,47 @@ def parse_token(token: str) -> Piece:
     )
 
 def parse_board_line(line: str, expected_width: int) -> Tuple[List, int]:
-    """parses a single board line and validates the tokens and row width."""
-    tokens = line.split()
+    tokens = line.strip().split()
     if not tokens:
-        return [], expected_width
-        
-    if expected_width == -1:
-        expected_width = len(tokens)
-    elif len(tokens) != expected_width:
-        print("ERROR ROW_WIDTH_MISMATCH")
-        sys.exit(0)
-        
+        return [], 0
+    
     row_pieces = []
     for token in tokens:
-        if token != ".":
-            if len(token) != 2 or token[0] not in ['w', 'b'] or token[1].upper() not in ['K', 'Q', 'R', 'B', 'N', 'P']:
-                print("ERROR UNKNOWN_TOKEN")
-                sys.exit(0)
-        row_pieces.append(parse_token(token))
-        
-    return row_pieces, expected_width
+        if token == '.':
+            row_pieces.append(None)
+        elif len(token) == 2:
+            color_char, type_char = token[0], token[1]
+            color = Color(color_char)
+            piece_type = PieceType(type_char)
+            row_pieces.append(Piece(color, piece_type))
+        else:
+            raise ValueError(f"Invalid token: {token}")
+            
+    if expected_width != -1 and len(row_pieces) != expected_width:
+        raise ValueError("Inconsistent board width")
+    return row_pieces, len(row_pieces)
 
 
-def parse_command_line(line: str, command_queue: deque):
-    """parses a single command line and adds the appropriate command to the queue."""
-    parts = line.split()
-    if not parts:
-        return
-
-    cmd_type = parts[0].lower()
-
-    if cmd_type == "click" and len(parts) == 3:
-        try:
-            command_queue.append(ClickCommand(int(parts[1]), int(parts[2])))
-        except ValueError:
-            pass
-    elif cmd_type == "wait" and len(parts) == 2:
-        try:
-            command_queue.append(WaitCommand(int(parts[1])))
-        except ValueError:
-            pass
-    elif line == "print board":
-        command_queue.append(PrintBoardCommand())
+def parse_board_line(line: str, expected_width: int) -> Tuple[List, int]:
+    tokens = line.strip().split()
+    if not tokens:
+        return [], 0
+    
+    row_pieces = []
+    for token in tokens:
+        if token == '.':
+            row_pieces.append(None)
+        elif len(token) == 2:
+            color_char, type_char = token[0], token[1]
+            color = Color(color_char)
+            piece_type = PieceType(type_char)
+            row_pieces.append(Piece(color, piece_type))
+        else:
+            raise ValueError(f"Invalid token: {token}")
+            
+    if expected_width != -1 and len(row_pieces) != expected_width:
+        raise ValueError("Inconsistent board width")
+    return row_pieces, len(row_pieces)
 
 
 def read_input_and_build_state(engine: ChessEngine, command_queue: deque):
@@ -109,7 +108,7 @@ def read_input_and_build_state(engine: ChessEngine, command_queue: deque):
             if row_pieces:
                 engine.add_board_row(row_pieces)
         elif current_mode == "commands":
-            parse_command_line(line, command_queue)
+            parse_board_line(line, command_queue)
 
 
 def execute_commands(engine: ChessEngine, command_queue: deque):
@@ -121,16 +120,42 @@ def execute_commands(engine: ChessEngine, command_queue: deque):
 # --- הפונקציה הראשית להרצה ---
 
 def main():
-    # אתחול המנוע עם Cooldown של 5000ms וזמן נסיעה של 2000ms בהתאם לעדכון האחרון
-    engine = ChessEngine(cooldown_duration=5000, travel_duration=2000)
+    lines = sys.stdin.read().splitlines()
+    engine = ChessEngine()
     command_queue = deque()
     
-    # שלב 1: עיבוד וקריאת זרם הקלט (לוח ופקודות)
-    read_input_and_build_state(engine, command_queue)
+    mode = "none"
+    expected_width = -1
     
-    # שלב 2: הרצת כל הפקודות על הלוח לפי סדר קבלתן
-    execute_commands(engine, command_queue)
-
-
-if __name__ == "__main__":
-    main()
+    for line in lines:
+        cleaned = line.strip()
+        if not cleaned:
+            continue
+        if cleaned == "Board:":
+            mode = "board"
+            continue
+        elif cleaned == "Commands:":
+            mode = "commands"
+            engine.init_cooldown_matrix()
+            continue
+            
+        if mode == "board":
+            row_pieces, w = parse_board_line(cleaned, expected_width)
+            if w > 0:
+                expected_width = w
+                engine.add_board_row(row_pieces)
+        elif mode == "commands":
+            parse_board_line(cleaned, command_queue)
+            
+    while command_queue:
+        item = command_queue.popleft()
+        if item[0] == "click":
+            _, x, y = item
+            row = y // 100
+            col = x // 100
+            engine.handle_click_position(Position(row, col))
+        elif item[0] == "wait":
+            _, ms = item
+            engine.advance_time(ms)
+        elif item[0] == "print_board":
+            engine.print_current_board()
