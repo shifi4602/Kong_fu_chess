@@ -110,5 +110,19 @@ class TestMovementStrategies(unittest.TestCase):
         self.assertIsInstance(StrategyFactory.get_strategy(PieceType.PAWN), PawnStrategy)
 
 
+    def test_invalid_rook_and_bishop_moves(self):
+        """the movment strategies for rook and bishop should reject invalid moves"""
+        strat_rook = RookStrategy()
+        # in valid diagonal move for rook - should return False on line 24
+        self.assertFalse(strat_rook.is_valid(self.board, Position(0, 0), Position(1, 2)))
+
+        strat_bishop = BishopStrategy()
+        # in valid straight move for bishop - should return False on line 30
+        self.assertFalse(strat_bishop.is_valid(self.board, Position(2, 0), Position(2, 2)))
+        
+        strat_queen = QueenStrategy()
+        # in valid diagonal move for queen - should return False on line 39
+        self.assertFalse(strat_queen.is_valid(self.board, Position(0, 0), Position(1, 2)))
+
 if __name__ == "__main__":
     unittest.main()
