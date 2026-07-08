@@ -2,6 +2,7 @@ import sys
 from collections import deque
 from types_and_constants import Color, PieceType, Position, Piece
 from chess_engine import ChessEngine
+from typing import Tuple, List
 
 # --- Command Pattern ---
 
@@ -40,8 +41,7 @@ def parse_token(token: str) -> Piece:
         piece_type=PieceType.from_value(token[1].upper())
     )
 
-
-def parse_board_line(line: str, expected_width: int) -> tuple[list, int]:
+def parse_board_line(line: str, expected_width: int) -> Tuple[List, int]:
     """parses a single board line and validates the tokens and row width."""
     tokens = line.split()
     if not tokens:

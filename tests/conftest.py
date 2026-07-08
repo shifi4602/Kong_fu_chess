@@ -9,7 +9,4 @@ parser_path = ROOT / "print the board"
 for path in [engine_path, parser_path]:
     path_str = str(path)
     if path_str not in sys.path:
-        if path == engine_path:
-            sys.path.insert(0, path_str)
-        else:
-            sys.path.append(path_str)
+        sys.path.insert(0, path_str)
