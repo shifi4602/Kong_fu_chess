@@ -114,3 +114,23 @@ def test_place_out_of_bounds_raises():
     board = Board(4, 4)
     with pytest.raises(ValueError):
         board.place(_piece(), Position(10, 10))
+
+
+def test_iter_yields_all_position_piece_pairs():
+    board = Board(4, 4)
+    p1 = _piece(Color.WHITE, PieceKind.KING)
+    p2 = _piece(Color.BLACK, PieceKind.ROOK)
+    board.place(p1, Position(0, 0))
+    board.place(p2, Position(1, 1))
+    pairs = list(board)
+    assert (Position(0, 0), p1) in pairs
+    assert (Position(1, 1), p2) in pairs
+    assert len(pairs) == 2
+
+
+def test_repr_includes_dimensions_and_count():
+    board = Board(4, 4)
+    board.place(_piece(), Position(0, 0))
+    r = repr(board)
+    assert '4x4' in r
+    assert '1' in r

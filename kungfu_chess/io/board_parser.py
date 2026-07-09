@@ -26,9 +26,6 @@ class BoardParser:
             raise ValueError("Board text is empty")
 
         cols = len(lines[0].split())
-        if cols == 0:
-            raise ValueError("First row has no tokens")
-
         board = Board(rows=len(lines), cols=cols)
 
         for row_idx, line in enumerate(lines):

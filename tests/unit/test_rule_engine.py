@@ -1,6 +1,7 @@
 from kungfu_chess.model import Board, Color, GameState, Piece, PieceKind, PieceState, Position
 from kungfu_chess.rules import (
     DestinationValidator,
+    MoveValidator,
     MovementValidator,
     MoveRequest,
     PieceExistsValidator,
@@ -124,3 +125,23 @@ def test_full_chain_moving_piece_rejected():
     board.place(wk, Position(4, 4))
     engine = default_rule_engine()
     assert not engine.can_move(state, MoveRequest(Position(4, 4), Position(4, 5)))
+
+
+def test_move_validator_abstract_body():
+    state = _state()
+    req = MoveRequest(Position(0, 0), Position(0, 1))
+    result = MoveValidator.validate(None, state, req)
+    assert result is None
+
+
+def test_movement_validator_no_piece_at_src():
+    state = _state()
+    v = MovementValidator({})
+    assert not v.validate(state, MoveRequest(Position(0, 0), Position(0, 1)))
+
+
+def test_movement_validator_no_rule_for_kind():
+    state = _state()
+    state.board.place(_piece(kind=PieceKind.KING), Position(0, 0))
+    v = MovementValidator({})
+    assert not v.validate(state, MoveRequest(Position(0, 0), Position(0, 1)))

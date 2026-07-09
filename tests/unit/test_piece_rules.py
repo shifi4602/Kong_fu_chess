@@ -1,6 +1,6 @@
 from kungfu_chess.model import Board, Color, Piece, PieceKind, Position
 from kungfu_chess.rules import (
-    BishopRule, KingRule, KnightRule, MoveRequest, PawnRule, QueenRule, RookRule,
+    BishopRule, KingRule, KnightRule, MoveRequest, PawnRule, PieceRule, QueenRule, RookRule,
 )
 
 
@@ -193,3 +193,13 @@ def test_pawn_white_two_steps_rejected():
     board = _board((wp, Position(4, 4)))
     rule = PawnRule()
     assert not rule.can_move(board, MoveRequest(Position(4, 4), Position(2, 4)))
+
+
+def test_pawn_no_piece_at_src():
+    rule = PawnRule()
+    assert not rule.can_move(_board(), MoveRequest(Position(4, 4), Position(3, 4)))
+
+
+def test_piece_rule_abstract_body():
+    result = PieceRule.can_move(None, _board(), MoveRequest(Position(0, 0), Position(0, 1)))
+    assert result is None

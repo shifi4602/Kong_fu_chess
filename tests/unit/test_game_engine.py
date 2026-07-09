@@ -118,3 +118,41 @@ def test_get_snapshot_reflects_motions():
     engine.request_move(MoveRequest(Position(3, 0), Position(3, 1)))
     snap = engine.get_snapshot()
     assert len(snap.motions) == 1
+
+
+def test_tick_when_game_already_over_is_noop():
+    board = Board(4, 4)
+    wk = Piece(id='wK', color=Color.WHITE, kind=PieceKind.KING, cell=Position(3, 3))
+    board.place(wk, Position(3, 3))
+    engine, _ = _make_engine(board)
+    engine.tick()
+    winner = engine.get_snapshot().winner
+    engine.tick()
+    assert engine.get_snapshot().winner == winner
+
+
+def test_check_game_over_already_over_is_noop():
+    board = Board(4, 4)
+    wk = Piece(id='wK', color=Color.WHITE, kind=PieceKind.KING, cell=Position(3, 3))
+    board.place(wk, Position(3, 3))
+    engine, _ = _make_engine(board)
+    engine.tick()
+    engine._check_game_over()
+    assert engine.get_snapshot().winner == Color.WHITE
+
+
+def test_game_over_white_king_captured_black_wins():
+    board = Board(4, 4)
+    bk = Piece(id='bK', color=Color.BLACK, kind=PieceKind.KING, cell=Position(0, 0))
+    wk = Piece(id='wK', color=Color.WHITE, kind=PieceKind.KING, cell=Position(3, 3))
+    br = Piece(id='bR', color=Color.BLACK, kind=PieceKind.ROOK, cell=Position(0, 3))
+    board.place(bk, Position(0, 0))
+    board.place(wk, Position(3, 3))
+    board.place(br, Position(0, 3))
+    engine, clock = _make_engine(board)
+    engine.request_move(MoveRequest(Position(0, 3), Position(3, 3)))
+    clock.advance(2.0)
+    engine.tick()
+    snap = engine.get_snapshot()
+    assert snap.winner == Color.BLACK
+    assert snap.is_over

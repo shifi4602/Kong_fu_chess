@@ -1,5 +1,5 @@
 from kungfu_chess.model import Board, Color, GameState, Piece, PieceKind, PieceState, Position
-from kungfu_chess.realtime import IClock, RealTimeArbiter
+from kungfu_chess.realtime import IClock, Motion, RealTimeArbiter, SystemClock
 
 
 class FakeClock(IClock):
@@ -109,3 +109,31 @@ def test_active_motions_returns_copy():
     motions = arbiter.active_motions()
     motions.clear()
     assert len(arbiter.active_motions()) == 1
+
+
+def test_iclock_abstract_body():
+    result = IClock.now(None)
+    assert result is None
+
+
+def test_system_clock_returns_positive_time():
+    clock = SystemClock()
+    assert clock.now() > 0.0
+
+
+def test_motion_progress_before_start():
+    piece = _piece()
+    m = Motion(piece=piece, src=Position(0, 0), dst=Position(0, 3), start_time=1.0, duration=2.0)
+    assert m.progress(0.5) == 0.0
+
+
+def test_motion_progress_at_completion():
+    piece = _piece()
+    m = Motion(piece=piece, src=Position(0, 0), dst=Position(0, 3), start_time=0.0, duration=2.0)
+    assert m.progress(2.0) == 1.0
+
+
+def test_motion_progress_midway():
+    piece = _piece()
+    m = Motion(piece=piece, src=Position(0, 0), dst=Position(0, 3), start_time=0.0, duration=2.0)
+    assert m.progress(1.0) == 0.5

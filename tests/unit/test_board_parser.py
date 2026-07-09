@@ -77,3 +77,15 @@ def test_parse_ignores_leading_trailing_blank_lines():
     board = parser.parse("\nwK .\n. bK\n")
     assert board.get(Position(0, 0)) is not None
     assert board.rows == 2
+
+
+def test_parse_jagged_rows_raises():
+    parser = BoardParser()
+    with pytest.raises(ValueError):
+        parser.parse("wK . .\n. bK")
+
+
+def test_parse_wrong_token_length_raises():
+    parser = BoardParser()
+    with pytest.raises(ValueError):
+        parser.parse("wKK .\n. bK")
