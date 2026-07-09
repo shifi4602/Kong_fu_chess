@@ -1,0 +1,11 @@
+# 04: rook cannot move diagonally — rejected move leaves piece in place
+BOARD
+bK . . .
+. . . .
+. . . .
+wR . . wK
+
+CLICK 3 0
+CLICK 0 3
+ASSERT_CELL 3 0 wR
+ASSERT_ALIVE

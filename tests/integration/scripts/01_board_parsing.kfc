@@ -1,0 +1,12 @@
+# 01: Verify board parsing places pieces at correct cells
+BOARD
+bK . . .
+. . . .
+. . . .
+. . . wK
+
+ASSERT_CELL 0 0 bK
+ASSERT_CELL 3 3 wK
+ASSERT_CELL 0 1 .
+ASSERT_CELL 1 0 .
+ASSERT_ALIVE

@@ -1,0 +1,13 @@
+# 02: click-to-move selects then moves a piece
+BOARD
+bK . . .
+. . . .
+. wK . .
+. . . .
+
+CLICK 2 1
+CLICK 1 1
+TICK 2.0
+ASSERT_CELL 1 1 wK
+ASSERT_CELL 2 1 .
+ASSERT_ALIVE
