@@ -1,8 +1,6 @@
 from abc import ABC, abstractmethod
 
-from kungfu_chess.model.board import Board
-from kungfu_chess.model.piece import Color
-from kungfu_chess.model.position import Position
+from kungfu_chess.model import Board, Color, Position
 from .move_request import MoveRequest
 
 

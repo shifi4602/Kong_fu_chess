@@ -3,13 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
 
-from kungfu_chess.model.board import Board
-from kungfu_chess.model.game_state import GameState
-from kungfu_chess.model.piece import Color, PieceKind
-from kungfu_chess.realtime.motion import Motion
-from kungfu_chess.realtime.real_time_arbiter import RealTimeArbiter
-from kungfu_chess.rules.move_request import MoveRequest
-from kungfu_chess.rules.rule_engine import RuleEngine
+from kungfu_chess.model import Board, Color, GameState, PieceKind
+from kungfu_chess.realtime import Motion, RealTimeArbiter
+from kungfu_chess.rules import MoveRequest, RuleEngine
 
 
 @dataclass(frozen=True)

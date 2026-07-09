@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from kungfu_chess.model.position import Position
+from kungfu_chess.model import Position
 
 
 @dataclass(frozen=True)

@@ -4,9 +4,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import List
 
-from kungfu_chess.model.game_state import GameState
-from kungfu_chess.model.piece import PieceState
-from kungfu_chess.model.position import Position
+from kungfu_chess.model import GameState, PieceState, Position
 
 from .motion import Motion
 

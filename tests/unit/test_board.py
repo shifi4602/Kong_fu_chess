@@ -1,7 +1,5 @@
 import pytest
-from kungfu_chess.model.board import Board
-from kungfu_chess.model.piece import Color, Piece, PieceKind
-from kungfu_chess.model.position import Position
+from kungfu_chess.model import Board, Color, Piece, PieceKind, Position
 
 
 def _piece(color=Color.WHITE, kind=PieceKind.KING) -> Piece:

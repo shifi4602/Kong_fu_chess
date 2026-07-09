@@ -1,9 +1,8 @@
 from typing import Optional
 
-from kungfu_chess.model.piece import PieceState
-from kungfu_chess.model.position import Position
-from kungfu_chess.rules.move_request import MoveRequest
-from kungfu_chess.engine.game_engine import GameEngine
+from kungfu_chess.engine import GameEngine
+from kungfu_chess.model import PieceState, Position
+from kungfu_chess.rules import MoveRequest
 from .board_mapper import BoardMapper
 
 

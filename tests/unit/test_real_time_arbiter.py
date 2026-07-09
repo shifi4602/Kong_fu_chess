@@ -1,8 +1,5 @@
-from kungfu_chess.model.board import Board
-from kungfu_chess.model.game_state import GameState
-from kungfu_chess.model.piece import Color, Piece, PieceKind, PieceState
-from kungfu_chess.model.position import Position
-from kungfu_chess.realtime.real_time_arbiter import IClock, RealTimeArbiter
+from kungfu_chess.model import Board, Color, GameState, Piece, PieceKind, PieceState, Position
+from kungfu_chess.realtime import IClock, RealTimeArbiter
 
 
 class FakeClock(IClock):

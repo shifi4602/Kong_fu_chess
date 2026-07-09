@@ -1,8 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 
-from kungfu_chess.model.piece import Piece
-from kungfu_chess.model.position import Position
+from kungfu_chess.model import Piece, Position
 
 
 @dataclass(frozen=True)

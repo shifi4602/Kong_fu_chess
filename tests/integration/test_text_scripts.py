@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from kungfu_chess.io.board_parser import BoardParser
-from kungfu_chess.rules.rule_engine import default_rule_engine
+from kungfu_chess.io import BoardParser
+from kungfu_chess.rules import default_rule_engine
 from texttests.script_runner import ScriptRunner
 
 SCRIPTS_DIR = Path(__file__).parent / 'scripts'

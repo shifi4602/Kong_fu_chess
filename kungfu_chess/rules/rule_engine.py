@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List
 
-from kungfu_chess.model.game_state import GameState
-from kungfu_chess.model.piece import PieceKind, PieceState
+from kungfu_chess.model import GameState, PieceKind, PieceState
 from .move_request import MoveRequest
 from .piece_rules import PieceRule, KingRule, QueenRule, RookRule, BishopRule, KnightRule, PawnRule
 

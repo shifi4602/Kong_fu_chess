@@ -1,7 +1,6 @@
 import pytest
-from kungfu_chess.io.board_parser import BoardParser
-from kungfu_chess.model.piece import Color, PieceKind
-from kungfu_chess.model.position import Position
+from kungfu_chess.io import BoardParser
+from kungfu_chess.model import Color, PieceKind, Position
 
 
 def test_parse_places_pieces_at_correct_positions():

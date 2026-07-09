@@ -1,11 +1,8 @@
-from kungfu_chess.model.board import Board
-from kungfu_chess.model.game_state import GameState
-from kungfu_chess.model.piece import Color, Piece, PieceKind, PieceState
-from kungfu_chess.model.position import Position
-from kungfu_chess.rules.move_request import MoveRequest
-from kungfu_chess.rules.rule_engine import (
+from kungfu_chess.model import Board, Color, GameState, Piece, PieceKind, PieceState, Position
+from kungfu_chess.rules import (
     DestinationValidator,
     MovementValidator,
+    MoveRequest,
     PieceExistsValidator,
     PieceIdleValidator,
     default_rule_engine,

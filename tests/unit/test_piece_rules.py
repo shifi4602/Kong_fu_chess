@@ -1,9 +1,6 @@
-from kungfu_chess.model.board import Board
-from kungfu_chess.model.piece import Color, Piece, PieceKind
-from kungfu_chess.model.position import Position
-from kungfu_chess.rules.move_request import MoveRequest
-from kungfu_chess.rules.piece_rules import (
-    BishopRule, KingRule, KnightRule, PawnRule, QueenRule, RookRule,
+from kungfu_chess.model import Board, Color, Piece, PieceKind, Position
+from kungfu_chess.rules import (
+    BishopRule, KingRule, KnightRule, MoveRequest, PawnRule, QueenRule, RookRule,
 )
 
 

@@ -1,8 +1,5 @@
-from kungfu_chess.io.board_parser import BoardParser
-from kungfu_chess.io.board_printer import BoardPrinter
-from kungfu_chess.model.board import Board
-from kungfu_chess.model.piece import Color, Piece, PieceKind
-from kungfu_chess.model.position import Position
+from kungfu_chess.io import BoardParser, BoardPrinter
+from kungfu_chess.model import Board, Color, Piece, PieceKind, Position
 
 
 def test_render_single_piece():

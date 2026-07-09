@@ -1,11 +1,7 @@
-from kungfu_chess.engine.game_engine import GameEngine
-from kungfu_chess.model.board import Board
-from kungfu_chess.model.game_state import GameState
-from kungfu_chess.model.piece import Color, Piece, PieceKind, PieceState
-from kungfu_chess.model.position import Position
-from kungfu_chess.realtime.real_time_arbiter import IClock, RealTimeArbiter
-from kungfu_chess.rules.move_request import MoveRequest
-from kungfu_chess.rules.rule_engine import default_rule_engine
+from kungfu_chess.engine import GameEngine
+from kungfu_chess.model import Board, Color, GameState, Piece, PieceKind, PieceState, Position
+from kungfu_chess.realtime import IClock, RealTimeArbiter
+from kungfu_chess.rules import MoveRequest, default_rule_engine
 
 
 class FakeClock(IClock):

@@ -1,14 +1,11 @@
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from kungfu_chess.engine.game_engine import GameEngine
-from kungfu_chess.io.board_parser import BoardParser
-from kungfu_chess.model.game_state import GameState
-from kungfu_chess.model.piece import Color, PieceKind, PieceState
-from kungfu_chess.model.position import Position
-from kungfu_chess.realtime.real_time_arbiter import IClock, RealTimeArbiter
-from kungfu_chess.rules.move_request import MoveRequest
-from kungfu_chess.rules.rule_engine import RuleEngine
+from kungfu_chess.engine import GameEngine
+from kungfu_chess.io import BoardParser
+from kungfu_chess.model import Color, GameState, PieceKind, PieceState, Position
+from kungfu_chess.realtime import IClock, RealTimeArbiter
+from kungfu_chess.rules import MoveRequest, RuleEngine
 
 from .script_parser import ScriptCommand, ScriptParser
 

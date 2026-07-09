@@ -1,5 +1,5 @@
-from kungfu_chess.input.board_mapper import BoardMapper
-from kungfu_chess.model.position import Position
+from kungfu_chess.input import BoardMapper
+from kungfu_chess.model import Position
 
 
 def test_pixel_to_position_origin():

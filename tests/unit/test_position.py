@@ -1,5 +1,5 @@
 import pytest
-from kungfu_chess.model.position import Position
+from kungfu_chess.model import Position
 
 
 def test_equality():
