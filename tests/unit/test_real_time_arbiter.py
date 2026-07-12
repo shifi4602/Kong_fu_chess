@@ -1,5 +1,5 @@
 from kungfu_chess.model import Board, Color, GameState, Piece, PieceKind, PieceState, Position
-from kungfu_chess.realtime import IClock, Motion, RealTimeArbiter, SystemClock
+from kungfu_chess.realtime import IClock, JumpAction, Motion, RealTimeArbiter, SystemClock
 
 
 class FakeClock(IClock):
@@ -137,3 +137,198 @@ def test_motion_progress_midway():
     piece = _piece()
     m = Motion(piece=piece, src=Position(0, 0), dst=Position(0, 3), start_time=0.0, duration=2.0)
     assert m.progress(1.0) == 0.5
+
+
+# --- Friendly-landing conflicts ---
+
+def test_friendly_landing_conflict_aborts_motion():
+    board, state, clock, arbiter = _setup()
+    mover = _piece(Color.WHITE, PieceKind.ROOK)
+    friend = _piece(Color.WHITE, PieceKind.PAWN)
+    board.place(mover, Position(0, 0))
+    arbiter.start_motion(state, Position(0, 0), Position(0, 3))
+    board.place(friend, Position(0, 3))
+    clock.advance(2.0)
+    arbiter.tick(state)
+    assert board.get(Position(0, 0)) is mover
+    assert mover.state == PieceState.IDLE
+    assert board.get(Position(0, 3)) is friend
+    assert friend.state == PieceState.IDLE
+
+
+def test_friendly_landing_conflict_leaves_active_motions_empty():
+    board, state, clock, arbiter = _setup()
+    mover = _piece(Color.WHITE, PieceKind.ROOK)
+    friend = _piece(Color.WHITE, PieceKind.PAWN)
+    board.place(mover, Position(0, 0))
+    arbiter.start_motion(state, Position(0, 0), Position(0, 3))
+    board.place(friend, Position(0, 3))
+    clock.advance(2.0)
+    arbiter.tick(state)
+    assert len(arbiter.active_motions()) == 0
+
+
+def test_enemy_race_to_same_square_still_captures():
+    board, state, clock, arbiter = _setup()
+    mover = _piece(Color.WHITE, PieceKind.ROOK)
+    enemy = _piece(Color.BLACK, PieceKind.PAWN)
+    board.place(mover, Position(0, 0))
+    arbiter.start_motion(state, Position(0, 0), Position(0, 3))
+    board.place(enemy, Position(0, 3))
+    clock.advance(2.0)
+    arbiter.tick(state)
+    assert board.get(Position(0, 3)) is mover
+    assert enemy.state == PieceState.CAPTURED
+
+
+# --- Pawn promotion ---
+
+def test_pawn_promotion_white_on_last_row():
+    board, state, clock, arbiter = _setup(rows=4, cols=4)
+    pawn = _piece(Color.WHITE, PieceKind.PAWN)
+    board.place(pawn, Position(1, 0))
+    arbiter.start_motion(state, Position(1, 0), Position(0, 0))
+    clock.advance(2.0)
+    arbiter.tick(state)
+    assert pawn.kind == PieceKind.QUEEN
+
+
+def test_pawn_promotion_black_on_last_row():
+    board, state, clock, arbiter = _setup(rows=4, cols=4)
+    pawn = _piece(Color.BLACK, PieceKind.PAWN)
+    board.place(pawn, Position(2, 0))
+    arbiter.start_motion(state, Position(2, 0), Position(3, 0))
+    clock.advance(2.0)
+    arbiter.tick(state)
+    assert pawn.kind == PieceKind.QUEEN
+
+
+def test_pawn_no_promotion_before_last_row():
+    board, state, clock, arbiter = _setup(rows=4, cols=4)
+    pawn = _piece(Color.WHITE, PieceKind.PAWN)
+    board.place(pawn, Position(2, 0))
+    arbiter.start_motion(state, Position(2, 0), Position(1, 0))
+    clock.advance(2.0)
+    arbiter.tick(state)
+    assert pawn.kind == PieceKind.PAWN
+
+
+def test_non_pawn_arrival_on_last_row_no_promotion():
+    board, state, clock, arbiter = _setup(rows=4, cols=4)
+    rook = _piece(Color.WHITE, PieceKind.ROOK)
+    board.place(rook, Position(1, 0))
+    arbiter.start_motion(state, Position(1, 0), Position(0, 0))
+    clock.advance(2.0)
+    arbiter.tick(state)
+    assert rook.kind == PieceKind.ROOK
+
+
+# --- Jump ---
+
+def test_start_jump_sets_jumping_state():
+    board, state, clock, arbiter = _setup()
+    piece = _piece()
+    board.place(piece, Position(0, 0))
+    arbiter.start_jump(state, Position(0, 0))
+    assert piece.state == PieceState.JUMPING
+
+
+def test_start_jump_adds_to_active_jumps():
+    board, state, clock, arbiter = _setup()
+    piece = _piece()
+    board.place(piece, Position(0, 0))
+    arbiter.start_jump(state, Position(0, 0))
+    assert len(arbiter.active_jumps()) == 1
+
+
+def test_active_jumps_returns_copy():
+    board, state, clock, arbiter = _setup()
+    piece = _piece()
+    board.place(piece, Position(0, 0))
+    arbiter.start_jump(state, Position(0, 0))
+    jumps = arbiter.active_jumps()
+    jumps.clear()
+    assert len(arbiter.active_jumps()) == 1
+
+
+def test_jump_stays_airborne_before_duration_elapses():
+    board, state, clock, arbiter = _setup()
+    arbiter._jump_duration = 5.0
+    piece = _piece()
+    board.place(piece, Position(0, 0))
+    arbiter.start_jump(state, Position(0, 0))
+    clock.advance(0.5)
+    arbiter.tick(state)
+    assert piece.state == PieceState.JUMPING
+    assert len(arbiter.active_jumps()) == 1
+
+
+def test_jump_lands_normally_after_duration():
+    board, state, clock, arbiter = _setup()
+    arbiter._jump_duration = 1.0
+    piece = _piece()
+    board.place(piece, Position(0, 0))
+    arbiter.start_jump(state, Position(0, 0))
+    clock.advance(1.0)
+    arbiter.tick(state)
+    assert piece.state == PieceState.IDLE
+    assert board.get(Position(0, 0)) is piece
+    assert len(arbiter.active_jumps()) == 0
+
+
+def test_jump_defends_against_arriving_enemy():
+    board, state, clock, arbiter = _setup()
+    arbiter._jump_duration = 5.0
+    defender = _piece(Color.BLACK, PieceKind.KING)
+    attacker = _piece(Color.WHITE, PieceKind.ROOK)
+    board.place(defender, Position(0, 3))
+    board.place(attacker, Position(0, 0))
+    arbiter.start_jump(state, Position(0, 3))
+    arbiter.start_motion(state, Position(0, 0), Position(0, 3))
+    clock.advance(2.0)
+    arbiter.tick(state)
+    assert attacker.state == PieceState.CAPTURED
+    assert board.get(Position(0, 0)) is None
+    assert board.get(Position(0, 3)) is defender
+    assert defender.state == PieceState.JUMPING
+
+
+def test_jump_defense_removes_attacker_from_active_motions():
+    board, state, clock, arbiter = _setup()
+    defender = _piece(Color.BLACK, PieceKind.KING)
+    attacker = _piece(Color.WHITE, PieceKind.ROOK)
+    board.place(defender, Position(0, 3))
+    board.place(attacker, Position(0, 0))
+    arbiter.start_jump(state, Position(0, 3))
+    arbiter.start_motion(state, Position(0, 0), Position(0, 3))
+    clock.advance(2.0)
+    arbiter.tick(state)
+    assert len(arbiter.active_motions()) == 0
+
+
+def test_arrival_after_jump_lands_captures_normally():
+    board, state, clock, arbiter = _setup()
+    arbiter._jump_duration = 1.0
+    arbiter._travel_duration = 3.0
+    defender = _piece(Color.BLACK, PieceKind.KING)
+    attacker = _piece(Color.WHITE, PieceKind.ROOK)
+    board.place(defender, Position(0, 3))
+    board.place(attacker, Position(0, 0))
+    arbiter.start_jump(state, Position(0, 3))
+    arbiter.start_motion(state, Position(0, 0), Position(0, 3))
+
+    clock.advance(1.0)
+    arbiter.tick(state)
+    assert defender.state == PieceState.IDLE
+
+    clock.advance(2.5)
+    arbiter.tick(state)
+    assert board.get(Position(0, 3)) is attacker
+    assert defender.state == PieceState.CAPTURED
+
+
+def test_jump_action_is_complete():
+    piece = _piece()
+    j = JumpAction(piece=piece, cell=Position(0, 0), start_time=0.0, duration=1.0)
+    assert not j.is_complete(0.5)
+    assert j.is_complete(1.0)

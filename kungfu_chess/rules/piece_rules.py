@@ -94,10 +94,20 @@ class PawnRule(PieceRule):
         if piece is None:
             return False
         direction = -1 if piece.color == Color.WHITE else 1
+        start_row = board.rows - 2 if piece.color == Color.WHITE else 1
         diff_r = dst.row - src.row
         diff_c = dst.col - src.col
         if diff_c == 0 and diff_r == direction:
             if board.is_occupied(dst):
+                return False
+            return True
+        if diff_c == 0 and diff_r == direction * 2:
+            if src.row != start_row:
+                return False
+            if board.is_occupied(dst):
+                return False
+            mid = Position(src.row + direction, src.col)
+            if board.is_occupied(mid):
                 return False
             return True
         if abs(diff_c) == 1 and diff_r == direction:

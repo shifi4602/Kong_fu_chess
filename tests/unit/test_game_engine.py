@@ -156,3 +156,72 @@ def test_game_over_white_king_captured_black_wins():
     snap = engine.get_snapshot()
     assert snap.winner == Color.BLACK
     assert snap.is_over
+
+
+def test_request_jump_valid_sets_jumping_state():
+    board = _board_with_kings()
+    wr = Piece(id='wR', color=Color.WHITE, kind=PieceKind.ROOK, cell=Position(3, 0))
+    board.place(wr, Position(3, 0))
+    engine, _ = _make_engine(board)
+    result = engine.request_jump(Position(3, 0))
+    assert result
+    assert wr.state == PieceState.JUMPING
+
+
+def test_request_jump_no_piece_at_position_rejected():
+    board = _board_with_kings()
+    engine, _ = _make_engine(board)
+    result = engine.request_jump(Position(2, 2))
+    assert not result
+
+
+def test_request_jump_moving_piece_rejected():
+    board = _board_with_kings()
+    wr = Piece(id='wR', color=Color.WHITE, kind=PieceKind.ROOK, cell=Position(3, 0))
+    board.place(wr, Position(3, 0))
+    engine, _ = _make_engine(board)
+    engine.request_move(MoveRequest(Position(3, 0), Position(3, 1)))
+    result = engine.request_jump(Position(3, 0))
+    assert not result
+
+
+def test_request_jump_already_jumping_piece_rejected():
+    board = _board_with_kings()
+    wr = Piece(id='wR', color=Color.WHITE, kind=PieceKind.ROOK, cell=Position(3, 0))
+    board.place(wr, Position(3, 0))
+    engine, _ = _make_engine(board)
+    engine.request_jump(Position(3, 0))
+    result = engine.request_jump(Position(3, 0))
+    assert not result
+
+
+def test_request_jump_after_game_over_rejected():
+    board = Board(4, 4)
+    wk = Piece(id='wK', color=Color.WHITE, kind=PieceKind.KING, cell=Position(3, 3))
+    board.place(wk, Position(3, 3))
+    engine, _ = _make_engine(board)
+    engine.tick()  # no black king -> game over
+    result = engine.request_jump(Position(3, 3))
+    assert not result
+
+
+def test_get_snapshot_reflects_jumps():
+    board = _board_with_kings()
+    wr = Piece(id='wR', color=Color.WHITE, kind=PieceKind.ROOK, cell=Position(3, 0))
+    board.place(wr, Position(3, 0))
+    engine, _ = _make_engine(board)
+    engine.request_jump(Position(3, 0))
+    snap = engine.get_snapshot()
+    assert len(snap.jumps) == 1
+
+
+def test_jump_lands_via_engine_tick():
+    board = _board_with_kings()
+    wr = Piece(id='wR', color=Color.WHITE, kind=PieceKind.ROOK, cell=Position(3, 0))
+    board.place(wr, Position(3, 0))
+    engine, clock = _make_engine(board)
+    engine.request_jump(Position(3, 0))
+    clock.advance(2.0)
+    engine.tick()
+    assert wr.state == PieceState.IDLE
+    assert engine.get_snapshot().board.get(Position(3, 0)) is wr

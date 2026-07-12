@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
 
-from kungfu_chess.model import Board, Color, GameState, PieceKind
-from kungfu_chess.realtime import Motion, RealTimeArbiter
+from kungfu_chess.model import Board, Color, GameState, PieceKind, PieceState, Position
+from kungfu_chess.realtime import JumpAction, Motion, RealTimeArbiter
 from kungfu_chess.rules import MoveRequest, RuleEngine
 
 
@@ -12,6 +12,7 @@ from kungfu_chess.rules import MoveRequest, RuleEngine
 class GameSnapshot:
     board: Board
     motions: List[Motion]
+    jumps: List[JumpAction]
     winner: Optional[Color]
     current_time: float
 
@@ -40,6 +41,17 @@ class GameEngine:
             self._arbiter.start_motion(self._state, request.src, request.dst)
             return True
         return False
+
+    def request_jump(self, position: Position) -> bool:
+        if self._state.is_over:
+            return False
+        piece = self._state.board.get(position)
+        if piece is None:
+            return False
+        if piece.state != PieceState.IDLE:
+            return False
+        self._arbiter.start_jump(self._state, position)
+        return True
 
     def tick(self) -> None:
         if self._state.is_over:
@@ -72,6 +84,7 @@ class GameEngine:
         return GameSnapshot(
             board=self._state.board,
             motions=self._arbiter.active_motions(),
+            jumps=self._arbiter.active_jumps(),
             winner=self._state.winner,
             current_time=self._state.current_time,
         )

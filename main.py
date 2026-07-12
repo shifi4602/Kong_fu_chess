@@ -1,109 +1,91 @@
-import time
+import sys
 
 import kungfu_chess.config as config
 from kungfu_chess.engine import GameEngine
 from kungfu_chess.input import BoardMapper, Controller
 from kungfu_chess.io import BoardParser, BoardPrinter
-from kungfu_chess.model import GameState, Position
-from kungfu_chess.realtime import RealTimeArbiter, SystemClock
-from kungfu_chess.rules import MoveRequest, default_rule_engine
-
-_INITIAL_BOARD = (
-    "bR bN bB bQ bK bB bN bR\n"
-    "bP bP bP bP bP bP bP bP\n"
-    ". . . . . . . .\n"
-    ". . . . . . . .\n"
-    ". . . . . . . .\n"
-    ". . . . . . . .\n"
-    "wP wP wP wP wP wP wP wP\n"
-    "wR wN wB wQ wK wB wN wR"
-)
-
-_HELP = (
-    "Kung Fu Chess - no turns, both sides move simultaneously\n"
-    "Pieces travel for {:.1f}s after a move is requested.\n"
-    "\n"
-    "Commands:\n"
-    "  <r1> <c1> <r2> <c2>  request a move  (e.g.  6 0 4 0)\n"
-    "  tick                  advance clock and show board\n"
-    "  board                 show current board\n"
-    "  quit                  exit\n"
-)
+from kungfu_chess.model import GameState
+from kungfu_chess.realtime import IClock, RealTimeArbiter
+from kungfu_chess.rules import default_rule_engine
 
 
-def _render(printer: BoardPrinter, engine: GameEngine) -> None:
-    snap = engine.get_snapshot()
-    print()
-    print(printer.render(snap.board))
-    motions = snap.motions
-    if motions:
-        print(f"  ({len(motions)} piece(s) in motion)")
-    print()
+class _FakeClock(IClock):
+    def __init__(self) -> None:
+        self._time: float = 0.0
+
+    def advance(self, seconds: float) -> None:
+        self._time += seconds
+
+    def now(self) -> float:
+        return self._time
+
+
+def _parse_input(text: str):
+    lines = text.splitlines()
+    board_lines = []
+    commands = []
+
+    i = 0
+    while i < len(lines) and lines[i].strip() != 'Board:':
+        i += 1
+    i += 1
+
+    while i < len(lines) and lines[i].strip() != 'Commands:':
+        line = lines[i].strip()
+        if line:
+            board_lines.append(line)
+        i += 1
+    i += 1
+
+    while i < len(lines):
+        line = lines[i].strip()
+        if line:
+            commands.append(line)
+        i += 1
+
+    return '\n'.join(board_lines), commands
 
 
 def main() -> None:
-    board = BoardParser().parse(_INITIAL_BOARD)
+    board_text, commands = _parse_input(sys.stdin.read())
+
+    try:
+        board = BoardParser().parse(board_text)
+    except ValueError as e:
+        msg = str(e)
+        if 'tokens, expected' in msg:
+            print('ERROR ROW_WIDTH_MISMATCH')
+        else:
+            print('ERROR UNKNOWN_TOKEN')
+        return
+
     state = GameState(board=board)
-    clock = SystemClock()
+    clock = _FakeClock()
     arbiter = RealTimeArbiter(clock, travel_duration=config.TRAVEL_DURATION)
     engine = GameEngine(state, default_rule_engine(), arbiter)
     mapper = BoardMapper(
         cell_size=config.CELL_SIZE,
-        rows=config.BOARD_ROWS,
-        cols=config.BOARD_COLS,
+        rows=board.rows,
+        cols=board.cols,
     )
     controller = Controller(engine, mapper)
     printer = BoardPrinter()
 
-    print(_HELP.format(config.TRAVEL_DURATION))
-    _render(printer, engine)
+    for cmd in commands:
+        parts = cmd.split()
+        if not parts:
+            continue
 
-    try:
-        while True:
+        if parts[0] == 'print' and len(parts) >= 2 and parts[1] == 'board':
+            print(printer.render(engine.get_snapshot().board))
+
+        elif parts[0] == 'click' and len(parts) == 3:
+            controller.on_click(int(parts[1]), int(parts[2]))
+
+        elif parts[0] == 'wait' and len(parts) == 2:
+            clock.advance(int(parts[1]) / 1000.0)
             controller.on_tick()
-            snap = engine.get_snapshot()
-
-            if snap.is_over:
-                _render(printer, engine)
-                print(f"Game over! {snap.winner.name} wins!")
-                break
-
-            try:
-                raw = input(">>> ").strip()
-            except EOFError:
-                break
-
-            if not raw or raw == "board":
-                _render(printer, engine)
-                continue
-
-            if raw == "quit":
-                break
-
-            if raw == "tick":
-                controller.on_tick()
-                _render(printer, engine)
-                continue
-
-            parts = raw.split()
-            if len(parts) != 4:
-                print("Use: row col row col   (e.g.  6 0 4 0)")
-                continue
-
-            try:
-                r1, c1, r2, c2 = int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])
-            except ValueError:
-                print("Coordinates must be integers.")
-                continue
-
-            if not engine.request_move(MoveRequest(Position(r1, c1), Position(r2, c2))):
-                print("Move not allowed.")
-            else:
-                print(f"Moving ({r1},{c1}) -> ({r2},{c2})  [arrives in {config.TRAVEL_DURATION}s]")
-
-    except KeyboardInterrupt:
-        print("\nGame ended.")
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

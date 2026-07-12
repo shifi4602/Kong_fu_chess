@@ -23,6 +23,7 @@ class PieceState(Enum):
     IDLE = 'idle'
     MOVING = 'moving'
     CAPTURED = 'captured'
+    JUMPING = 'jumping'
 
 
 @dataclass

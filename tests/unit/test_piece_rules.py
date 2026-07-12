@@ -195,6 +195,43 @@ def test_pawn_white_two_steps_rejected():
     assert not rule.can_move(board, MoveRequest(Position(4, 4), Position(2, 4)))
 
 
+def test_pawn_white_two_steps_from_start_row_allowed():
+    wp = _piece(Color.WHITE, PieceKind.PAWN)
+    board = _board((wp, Position(6, 4)))
+    rule = PawnRule()
+    assert rule.can_move(board, MoveRequest(Position(6, 4), Position(4, 4)))
+
+
+def test_pawn_white_two_steps_blocked_mid_path():
+    wp = _piece(Color.WHITE, PieceKind.PAWN)
+    blocker = _piece(Color.BLACK, PieceKind.PAWN)
+    board = _board((wp, Position(6, 4)), (blocker, Position(5, 4)))
+    rule = PawnRule()
+    assert not rule.can_move(board, MoveRequest(Position(6, 4), Position(4, 4)))
+
+
+def test_pawn_white_two_steps_destination_occupied():
+    wp = _piece(Color.WHITE, PieceKind.PAWN)
+    blocker = _piece(Color.BLACK, PieceKind.PAWN)
+    board = _board((wp, Position(6, 4)), (blocker, Position(4, 4)))
+    rule = PawnRule()
+    assert not rule.can_move(board, MoveRequest(Position(6, 4), Position(4, 4)))
+
+
+def test_pawn_black_two_steps_from_start_row_allowed():
+    bp = _piece(Color.BLACK, PieceKind.PAWN)
+    board = _board((bp, Position(1, 4)))
+    rule = PawnRule()
+    assert rule.can_move(board, MoveRequest(Position(1, 4), Position(3, 4)))
+
+
+def test_pawn_black_two_steps_not_from_start_row_rejected():
+    bp = _piece(Color.BLACK, PieceKind.PAWN)
+    board = _board((bp, Position(3, 4)))
+    rule = PawnRule()
+    assert not rule.can_move(board, MoveRequest(Position(3, 4), Position(5, 4)))
+
+
 def test_pawn_no_piece_at_src():
     rule = PawnRule()
     assert not rule.can_move(_board(), MoveRequest(Position(4, 4), Position(3, 4)))
