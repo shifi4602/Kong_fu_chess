@@ -36,12 +36,13 @@ class RealTimeArbiter:
 
     def start_motion(self, state: GameState, src: Position, dst: Position) -> None:
         piece = state.board.get(src)
+        distance = max(abs(dst.row - src.row), abs(dst.col - src.col))
         motion = Motion(
             piece=piece,
             src=src,
             dst=dst,
             start_time=self._clock.now(),
-            duration=self._travel_duration,
+            duration=self._travel_duration * distance,
         )
         piece.state = PieceState.MOVING
         self._motions.append(motion)
@@ -84,12 +85,15 @@ class RealTimeArbiter:
             self._land_jump(jump)
 
     def _resolve_arrival(self, state: GameState, motion: Motion) -> None:
+        if motion.piece.state == PieceState.CAPTURED:
+            return
+
         occupant = state.board.get(motion.dst)
 
         if occupant is not None and occupant.state == PieceState.JUMPING and occupant.color != motion.piece.color:
-            motion.piece.state = PieceState.CAPTURED
             if state.board.get(motion.src) is motion.piece:
                 state.board.remove(motion.src)
+            self._capture(state, motion.piece)
             return
 
         if occupant is not None and occupant.color == motion.piece.color:
@@ -98,7 +102,7 @@ class RealTimeArbiter:
 
         if occupant is not None:
             state.board.remove(motion.dst)
-            occupant.state = PieceState.CAPTURED
+            self._capture(state, occupant)
 
         if state.board.get(motion.src) is motion.piece:
             state.board.remove(motion.src)
@@ -106,6 +110,11 @@ class RealTimeArbiter:
         state.board.place(motion.piece, motion.dst)
         motion.piece.state = PieceState.IDLE
         self._maybe_promote(state, motion.piece)
+
+    def _capture(self, state: GameState, piece) -> None:
+        piece.state = PieceState.CAPTURED
+        if piece.kind == PieceKind.KING:
+            state.winner = Color.BLACK if piece.color == Color.WHITE else Color.WHITE
 
     def _maybe_promote(self, state: GameState, piece) -> None:
         if piece.kind != PieceKind.PAWN:

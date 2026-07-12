@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
 
-from kungfu_chess.model import Board, Color, GameState, PieceKind, PieceState, Position
+from kungfu_chess.model import Board, Color, GameState, PieceState, Position
 from kungfu_chess.realtime import JumpAction, Motion, RealTimeArbiter
 from kungfu_chess.rules import MoveRequest, RuleEngine
 
@@ -57,28 +57,6 @@ class GameEngine:
         if self._state.is_over:
             return
         self._arbiter.tick(self._state)
-        self._check_game_over()
-
-    def _check_game_over(self) -> None:
-        if self._state.is_over:
-            return
-
-        white_has_king = False
-        black_has_king = False
-
-        for piece in self._state.board.all_pieces():
-            if piece.kind == PieceKind.KING:
-                if piece.color == Color.WHITE:
-                    white_has_king = True
-                if piece.color == Color.BLACK:
-                    black_has_king = True
-
-        if not white_has_king:
-            self._state.winner = Color.BLACK
-            return
-        if not black_has_king:
-            self._state.winner = Color.WHITE
-            return
 
     def get_snapshot(self) -> GameSnapshot:
         return GameSnapshot(

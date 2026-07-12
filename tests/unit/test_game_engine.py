@@ -82,7 +82,7 @@ def test_game_over_black_king_captured():
     board.place(wr, Position(3, 0))
     engine, clock = _make_engine(board)
     engine.request_move(MoveRequest(Position(3, 0), Position(0, 0)))
-    clock.advance(2.0)
+    clock.advance(3.0)
     engine.tick()
     snap = engine.get_snapshot()
     assert snap.winner == Color.WHITE
@@ -99,14 +99,16 @@ def test_game_not_over_with_both_kings():
 
 
 def test_request_move_after_game_over_rejected():
-    board = Board(4, 4)
-    wk = Piece(id='wK', color=Color.WHITE, kind=PieceKind.KING, cell=Position(3, 3))
-    board.place(wk, Position(3, 3))
-    engine, _ = _make_engine(board)
-    engine.tick()  # no black king → game over
+    board = _board_with_kings()
+    wr = Piece(id='wR', color=Color.WHITE, kind=PieceKind.ROOK, cell=Position(3, 0))
+    board.place(wr, Position(3, 0))
+    engine, clock = _make_engine(board)
+    engine.request_move(MoveRequest(Position(3, 0), Position(0, 0)))
+    clock.advance(3.0)
+    engine.tick()  # wR captures bK → game over
     snap = engine.get_snapshot()
     assert snap.is_over
-    result = engine.request_move(MoveRequest(Position(3, 3), Position(3, 2)))
+    result = engine.request_move(MoveRequest(Position(0, 0), Position(0, 1)))
     assert not result
 
 
@@ -121,24 +123,16 @@ def test_get_snapshot_reflects_motions():
 
 
 def test_tick_when_game_already_over_is_noop():
-    board = Board(4, 4)
-    wk = Piece(id='wK', color=Color.WHITE, kind=PieceKind.KING, cell=Position(3, 3))
-    board.place(wk, Position(3, 3))
-    engine, _ = _make_engine(board)
+    board = _board_with_kings()
+    wr = Piece(id='wR', color=Color.WHITE, kind=PieceKind.ROOK, cell=Position(3, 0))
+    board.place(wr, Position(3, 0))
+    engine, clock = _make_engine(board)
+    engine.request_move(MoveRequest(Position(3, 0), Position(0, 0)))
+    clock.advance(3.0)
     engine.tick()
     winner = engine.get_snapshot().winner
     engine.tick()
     assert engine.get_snapshot().winner == winner
-
-
-def test_check_game_over_already_over_is_noop():
-    board = Board(4, 4)
-    wk = Piece(id='wK', color=Color.WHITE, kind=PieceKind.KING, cell=Position(3, 3))
-    board.place(wk, Position(3, 3))
-    engine, _ = _make_engine(board)
-    engine.tick()
-    engine._check_game_over()
-    assert engine.get_snapshot().winner == Color.WHITE
 
 
 def test_game_over_white_king_captured_black_wins():
@@ -151,7 +145,7 @@ def test_game_over_white_king_captured_black_wins():
     board.place(br, Position(0, 3))
     engine, clock = _make_engine(board)
     engine.request_move(MoveRequest(Position(0, 3), Position(3, 3)))
-    clock.advance(2.0)
+    clock.advance(3.0)
     engine.tick()
     snap = engine.get_snapshot()
     assert snap.winner == Color.BLACK
@@ -196,11 +190,13 @@ def test_request_jump_already_jumping_piece_rejected():
 
 
 def test_request_jump_after_game_over_rejected():
-    board = Board(4, 4)
-    wk = Piece(id='wK', color=Color.WHITE, kind=PieceKind.KING, cell=Position(3, 3))
-    board.place(wk, Position(3, 3))
-    engine, _ = _make_engine(board)
-    engine.tick()  # no black king -> game over
+    board = _board_with_kings()
+    wr = Piece(id='wR', color=Color.WHITE, kind=PieceKind.ROOK, cell=Position(3, 0))
+    board.place(wr, Position(3, 0))
+    engine, clock = _make_engine(board)
+    engine.request_move(MoveRequest(Position(3, 0), Position(0, 0)))
+    clock.advance(3.0)
+    engine.tick()  # wR captures bK -> game over
     result = engine.request_jump(Position(3, 3))
     assert not result
 

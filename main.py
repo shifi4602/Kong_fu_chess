@@ -82,6 +82,9 @@ def main() -> None:
         elif parts[0] == 'click' and len(parts) == 3:
             controller.on_click(int(parts[1]), int(parts[2]))
 
+        elif parts[0] == 'jump' and len(parts) == 3:
+            controller.on_jump(int(parts[1]), int(parts[2]))
+
         elif parts[0] == 'wait' and len(parts) == 2:
             clock.advance(int(parts[1]) / 1000.0)
             controller.on_tick()

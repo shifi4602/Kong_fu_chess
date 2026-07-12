@@ -100,6 +100,25 @@ def test_on_tick_advances_engine():
     assert snap.board.get(Position(3, 1)) is not None
 
 
+def test_on_jump_sets_jumping_state():
+    ctrl, _, engine = _make_controller()
+    ctrl.on_jump(*_px(0, 3))  # wR at (3, 0)
+    piece = engine.get_snapshot().board.get(Position(3, 0))
+    assert piece.state == PieceState.JUMPING
+
+
+def test_on_jump_out_of_bounds_ignored():
+    ctrl, _, engine = _make_controller()
+    ctrl.on_jump(9999, 9999)
+    assert len(engine.get_snapshot().jumps) == 0
+
+
+def test_on_jump_empty_cell_is_noop():
+    ctrl, _, engine = _make_controller()
+    ctrl.on_jump(*_px(1, 1))  # empty cell
+    assert len(engine.get_snapshot().jumps) == 0
+
+
 def test_click_moving_piece_not_selected():
     ctrl, _, _ = _make_controller()
     ctrl.on_click(*_px(0, 3))  # select wR at (3,0)

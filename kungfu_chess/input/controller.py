@@ -19,6 +19,12 @@ class Controller:
     def on_tick(self) -> None:
         self._engine.tick()
 
+    def on_jump(self, x: int, y: int) -> None:
+        pos = self._mapper.pixel_to_position(x, y)
+        if pos is None:
+            return
+        self._engine.request_jump(pos)
+
     def on_click(self, x: int, y: int) -> None:
         pos = self._mapper.pixel_to_position(x, y)
         if pos is None:

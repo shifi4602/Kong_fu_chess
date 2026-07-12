@@ -46,7 +46,7 @@ def test_tick_completes_motion():
     piece = _piece()
     board.place(piece, Position(0, 0))
     arbiter.start_motion(state, Position(0, 0), Position(0, 3))
-    clock.advance(2.0)
+    clock.advance(3.0)
     arbiter.tick(state)
     assert board.get(Position(0, 3)) is piece
     assert board.get(Position(0, 0)) is None
@@ -58,9 +58,21 @@ def test_tick_removes_from_active_on_completion():
     piece = _piece()
     board.place(piece, Position(0, 0))
     arbiter.start_motion(state, Position(0, 0), Position(0, 3))
-    clock.advance(2.0)
+    clock.advance(3.0)
     arbiter.tick(state)
     assert len(arbiter.active_motions()) == 0
+
+
+def test_motion_duration_scales_with_distance():
+    board, state, clock, arbiter = _setup()
+    piece = _piece()
+    board.place(piece, Position(0, 0))
+    arbiter.start_motion(state, Position(0, 0), Position(0, 3))
+    clock.advance(2.0)
+    arbiter.tick(state)
+    assert board.get(Position(0, 0)) is piece
+    assert board.get(Position(0, 3)) is None
+    assert piece.state == PieceState.MOVING
 
 
 def test_tick_incomplete_motion_stays_at_src():
@@ -83,7 +95,7 @@ def test_capture_on_arrival():
     board.place(attacker, Position(0, 0))
     board.place(defender, Position(0, 3))
     arbiter.start_motion(state, Position(0, 0), Position(0, 3))
-    clock.advance(2.0)
+    clock.advance(3.0)
     arbiter.tick(state)
     assert board.get(Position(0, 3)) is attacker
     assert defender.state == PieceState.CAPTURED
@@ -96,7 +108,7 @@ def test_identity_check_skips_src_removal_if_replaced():
     board.place(original, Position(0, 0))
     arbiter.start_motion(state, Position(0, 0), Position(0, 3))
     board.place(interloper, Position(0, 0))
-    clock.advance(2.0)
+    clock.advance(3.0)
     arbiter.tick(state)
     assert board.get(Position(0, 0)) is interloper
 
@@ -148,7 +160,7 @@ def test_friendly_landing_conflict_aborts_motion():
     board.place(mover, Position(0, 0))
     arbiter.start_motion(state, Position(0, 0), Position(0, 3))
     board.place(friend, Position(0, 3))
-    clock.advance(2.0)
+    clock.advance(3.0)
     arbiter.tick(state)
     assert board.get(Position(0, 0)) is mover
     assert mover.state == PieceState.IDLE
@@ -163,7 +175,7 @@ def test_friendly_landing_conflict_leaves_active_motions_empty():
     board.place(mover, Position(0, 0))
     arbiter.start_motion(state, Position(0, 0), Position(0, 3))
     board.place(friend, Position(0, 3))
-    clock.advance(2.0)
+    clock.advance(3.0)
     arbiter.tick(state)
     assert len(arbiter.active_motions()) == 0
 
@@ -175,10 +187,25 @@ def test_enemy_race_to_same_square_still_captures():
     board.place(mover, Position(0, 0))
     arbiter.start_motion(state, Position(0, 0), Position(0, 3))
     board.place(enemy, Position(0, 3))
-    clock.advance(2.0)
+    clock.advance(3.0)
     arbiter.tick(state)
     assert board.get(Position(0, 3)) is mover
     assert enemy.state == PieceState.CAPTURED
+
+
+def test_captured_piece_in_flight_motion_does_not_resurrect():
+    board, state, clock, arbiter = _setup()
+    white = _piece(Color.WHITE, PieceKind.ROOK)
+    black = _piece(Color.BLACK, PieceKind.ROOK)
+    board.place(white, Position(0, 0))
+    board.place(black, Position(0, 3))
+    arbiter.start_motion(state, Position(0, 0), Position(0, 3))
+    arbiter.start_motion(state, Position(0, 3), Position(0, 0))
+    clock.advance(3.0)
+    arbiter.tick(state)
+    assert board.get(Position(0, 3)) is white
+    assert board.get(Position(0, 0)) is None
+    assert black.state == PieceState.CAPTURED
 
 
 # --- Pawn promotion ---
@@ -285,7 +312,7 @@ def test_jump_defends_against_arriving_enemy():
     board.place(attacker, Position(0, 0))
     arbiter.start_jump(state, Position(0, 3))
     arbiter.start_motion(state, Position(0, 0), Position(0, 3))
-    clock.advance(2.0)
+    clock.advance(3.0)
     arbiter.tick(state)
     assert attacker.state == PieceState.CAPTURED
     assert board.get(Position(0, 0)) is None
@@ -295,13 +322,14 @@ def test_jump_defends_against_arriving_enemy():
 
 def test_jump_defense_removes_attacker_from_active_motions():
     board, state, clock, arbiter = _setup()
+    arbiter._jump_duration = 5.0
     defender = _piece(Color.BLACK, PieceKind.KING)
     attacker = _piece(Color.WHITE, PieceKind.ROOK)
     board.place(defender, Position(0, 3))
     board.place(attacker, Position(0, 0))
     arbiter.start_jump(state, Position(0, 3))
     arbiter.start_motion(state, Position(0, 0), Position(0, 3))
-    clock.advance(2.0)
+    clock.advance(3.0)
     arbiter.tick(state)
     assert len(arbiter.active_motions()) == 0
 
@@ -309,7 +337,6 @@ def test_jump_defense_removes_attacker_from_active_motions():
 def test_arrival_after_jump_lands_captures_normally():
     board, state, clock, arbiter = _setup()
     arbiter._jump_duration = 1.0
-    arbiter._travel_duration = 3.0
     defender = _piece(Color.BLACK, PieceKind.KING)
     attacker = _piece(Color.WHITE, PieceKind.ROOK)
     board.place(defender, Position(0, 3))
