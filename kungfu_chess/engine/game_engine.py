@@ -50,6 +50,8 @@ class GameEngine:
             return False
         if piece.state != PieceState.IDLE:
             return False
+        if not self._arbiter.can_jump(piece):
+            return False
         self._arbiter.start_jump(self._state, position)
         return True
 

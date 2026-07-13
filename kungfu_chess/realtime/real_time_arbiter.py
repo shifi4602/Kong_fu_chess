@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
-from typing import List
+from typing import Dict, List
 
 from kungfu_chess.model import Color, GameState, PieceKind, PieceState, Position
 
@@ -27,12 +27,15 @@ class RealTimeArbiter:
         clock: IClock,
         travel_duration: float = 1.0,
         jump_duration: float = 1.0,
+        jump_cooldown: float = 1.0,
     ) -> None:
         self._clock = clock
         self._travel_duration = travel_duration
         self._jump_duration = jump_duration
+        self._jump_cooldown = jump_cooldown
         self._motions: List[Motion] = []
         self._jumps: List[JumpAction] = []
+        self._jump_ready_at: Dict[str, float] = {}
 
     def start_motion(self, state: GameState, src: Position, dst: Position) -> None:
         piece = state.board.get(src)
@@ -46,6 +49,12 @@ class RealTimeArbiter:
         )
         piece.state = PieceState.MOVING
         self._motions.append(motion)
+
+    def can_jump(self, piece) -> bool:
+        ready_at = self._jump_ready_at.get(piece.id)
+        if ready_at is None:
+            return True
+        return self._clock.now() >= ready_at
 
     def start_jump(self, state: GameState, position: Position) -> None:
         piece = state.board.get(position)
@@ -82,7 +91,7 @@ class RealTimeArbiter:
                 still_jumping.append(jump)
         self._jumps = still_jumping
         for jump in completed_jumps:
-            self._land_jump(jump)
+            self._land_jump(jump, now)
 
     def _resolve_arrival(self, state: GameState, motion: Motion) -> None:
         if motion.piece.state == PieceState.CAPTURED:
@@ -123,8 +132,9 @@ class RealTimeArbiter:
         if piece.cell.row == last_row:
             piece.kind = PieceKind.QUEEN
 
-    def _land_jump(self, jump: JumpAction) -> None:
+    def _land_jump(self, jump: JumpAction, now: float) -> None:
         jump.piece.state = PieceState.IDLE
+        self._jump_ready_at[jump.piece.id] = now + self._jump_cooldown
 
     def active_motions(self) -> List[Motion]:
         return list(self._motions)

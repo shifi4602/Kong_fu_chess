@@ -359,3 +359,42 @@ def test_jump_action_is_complete():
     j = JumpAction(piece=piece, cell=Position(0, 0), start_time=0.0, duration=1.0)
     assert not j.is_complete(0.5)
     assert j.is_complete(1.0)
+
+
+# --- Jump cooldown ---
+
+def test_can_jump_true_when_never_jumped():
+    board, state, clock, arbiter = _setup()
+    piece = _piece()
+    board.place(piece, Position(0, 0))
+    assert arbiter.can_jump(piece)
+
+
+def test_can_jump_false_immediately_after_landing():
+    board, state, clock, arbiter = _setup()
+    arbiter._jump_duration = 1.0
+    arbiter._jump_cooldown = 1.0
+    piece = _piece()
+    board.place(piece, Position(0, 0))
+    arbiter.start_jump(state, Position(0, 0))
+    clock.advance(1.0)
+    arbiter.tick(state)
+    assert not arbiter.can_jump(piece)
+
+
+def test_can_jump_true_after_cooldown_elapses():
+    board, state, clock, arbiter = _setup()
+    arbiter._jump_duration = 1.0
+    arbiter._jump_cooldown = 1.0
+    piece = _piece()
+    board.place(piece, Position(0, 0))
+    arbiter.start_jump(state, Position(0, 0))
+    clock.advance(1.0)
+    arbiter.tick(state)
+    clock.advance(1.0)
+    assert arbiter.can_jump(piece)
+
+
+def test_default_jump_cooldown_is_one_second():
+    board, state, clock, arbiter = _setup()
+    assert arbiter._jump_cooldown == 1.0

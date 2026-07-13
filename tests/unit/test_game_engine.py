@@ -221,3 +221,30 @@ def test_jump_lands_via_engine_tick():
     engine.tick()
     assert wr.state == PieceState.IDLE
     assert engine.get_snapshot().board.get(Position(3, 0)) is wr
+
+
+def test_request_jump_during_cooldown_rejected():
+    board = _board_with_kings()
+    wr = Piece(id='wR', color=Color.WHITE, kind=PieceKind.ROOK, cell=Position(3, 0))
+    board.place(wr, Position(3, 0))
+    engine, clock = _make_engine(board)
+    engine.request_jump(Position(3, 0))
+    clock.advance(2.0)
+    engine.tick()  # jump lands, IDLE again but cooldown active
+    result = engine.request_jump(Position(3, 0))
+    assert not result
+    assert wr.state == PieceState.IDLE
+
+
+def test_request_jump_allowed_after_cooldown_elapses():
+    board = _board_with_kings()
+    wr = Piece(id='wR', color=Color.WHITE, kind=PieceKind.ROOK, cell=Position(3, 0))
+    board.place(wr, Position(3, 0))
+    engine, clock = _make_engine(board)
+    engine.request_jump(Position(3, 0))
+    clock.advance(2.0)
+    engine.tick()  # jump lands at t=2.0, ready again at t=3.0
+    clock.advance(1.0)
+    result = engine.request_jump(Position(3, 0))
+    assert result
+    assert wr.state == PieceState.JUMPING
