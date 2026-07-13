@@ -84,6 +84,8 @@ class KnightRule(PieceRule):
         dc = abs(dst.col - src.col)
         if (dr == 2 and dc == 1) or (dr == 1 and dc == 2):
             return True
+        if not _is_path_clear(board, src, dst, dr, dc):
+            return False
         return False
 
 
