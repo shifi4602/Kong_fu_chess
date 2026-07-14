@@ -295,3 +295,36 @@ All added to `tests/unit/test_real_time_arbiter.py`, under
 - Nothing about board rendering (`BoardPrinter`) needed to change — the
   board only ever shows resting positions, same as before; in-flight pieces
   are still only visible via `GameSnapshot.motions`, unchanged.
+
+## Future work: performance at larger scale (not implemented)
+
+`_resolve_motions` currently has two independent `O(N)` linear scans in its
+hot path, where `N` is the number of active motions:
+
+1. `_earliest_pending_motion` rescans every active motion, on every single
+   resolved event, to find the next one chronologically. A tick that
+   resolves `E` events costs `O(E·N)`.
+2. `_resident_at` also rescans every other active motion, per event, to
+   check whether it currently occupies the target cell.
+
+For this project — a chess board, max 32 pieces — this is a non-issue,
+which is why the simple linear scan was chosen over a more complex
+structure. If this arbiter is ever reused for a scenario with hundreds or
+thousands of concurrently-moving entities, both scans would need to be
+replaced together (fixing only one leaves the other dominating):
+
+- A min-heap of `(entry_time, sequence)` per motion, populated in full at
+  `start_motion` time (every entry time for a motion's whole path is fixed
+  at creation, so the entire path can be pushed up front, not just the next
+  step). Needs **lazy deletion**: when a motion is cancelled mid-tick
+  (captured or blocked), its still-queued future heap entries go stale —
+  check "is this still the motion's next expected index and is it still
+  active" on pop, and discard if not.
+- An auxiliary `cell → (piece, motion)` occupancy index for in-flight
+  movers, updated in `O(1)` as each motion advances a square. This is what
+  actually fixes `_resident_at` — the heap alone does not, since it only
+  speeds up picking the next event, not the residency check.
+
+Together these would bring a tick from roughly `O(E·N)` down to
+`O(E log N)`. Flagging this now so it isn't forgotten if piece/entity counts
+ever grow beyond chess scale — not something to build today.
