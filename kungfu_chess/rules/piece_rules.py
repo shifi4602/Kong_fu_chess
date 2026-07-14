@@ -16,12 +16,12 @@ def _is_path_clear(board: Board, src: Position, dst: Position, dr: int, dc: int)
 
 class PieceRule(ABC):
     @abstractmethod
-    def can_move(self, board: Board, request: MoveRequest) -> bool:
+    def is_valid(self, board: Board, request: MoveRequest) -> bool:
         pass
 
 
 class KingRule(PieceRule):
-    def can_move(self, board: Board, request: MoveRequest) -> bool:
+    def is_valid(self, board: Board, request: MoveRequest) -> bool:
         src, dst = request.src, request.dst
         dr = abs(dst.row - src.row)
         dc = abs(dst.col - src.col)
@@ -33,7 +33,7 @@ class KingRule(PieceRule):
 
 
 class RookRule(PieceRule):
-    def can_move(self, board: Board, request: MoveRequest) -> bool:
+    def is_valid(self, board: Board, request: MoveRequest) -> bool:
         src, dst = request.src, request.dst
         diff_r = dst.row - src.row
         diff_c = dst.col - src.col
@@ -49,7 +49,7 @@ class RookRule(PieceRule):
 
 
 class BishopRule(PieceRule):
-    def can_move(self, board: Board, request: MoveRequest) -> bool:
+    def is_valid(self, board: Board, request: MoveRequest) -> bool:
         src, dst = request.src, request.dst
         diff_r = dst.row - src.row
         diff_c = dst.col - src.col
@@ -69,16 +69,16 @@ class QueenRule(PieceRule):
         self._rook = RookRule()
         self._bishop = BishopRule()
 
-    def can_move(self, board: Board, request: MoveRequest) -> bool:
-        if self._rook.can_move(board, request):
+    def is_valid(self, board: Board, request: MoveRequest) -> bool:
+        if self._rook.is_valid(board, request):
             return True
-        if self._bishop.can_move(board, request):
+        if self._bishop.is_valid(board, request):
             return True
         return False
 
 
 class KnightRule(PieceRule):
-    def can_move(self, board: Board, request: MoveRequest) -> bool:
+    def is_valid(self, board: Board, request: MoveRequest) -> bool:
         src, dst = request.src, request.dst
         dr = abs(dst.row - src.row)
         dc = abs(dst.col - src.col)
@@ -90,7 +90,7 @@ class KnightRule(PieceRule):
 
 
 class PawnRule(PieceRule):
-    def can_move(self, board: Board, request: MoveRequest) -> bool:
+    def is_valid(self, board: Board, request: MoveRequest) -> bool:
         src, dst = request.src, request.dst
         piece = board.get(src)
         if piece is None:

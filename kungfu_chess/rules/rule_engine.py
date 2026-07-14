@@ -55,7 +55,7 @@ class MovementValidator(MoveValidator):
         rule = self._rules.get(piece.kind)
         if rule is None:
             return False
-        if not rule.can_move(state.board, request):
+        if not rule.is_valid(state.board, request):
             return False
         return True
 
@@ -64,7 +64,7 @@ class RuleEngine:
     def __init__(self, validators: List[MoveValidator]) -> None:
         self._validators = validators
 
-    def can_move(self, state: GameState, request: MoveRequest) -> bool:
+    def is_valid(self, state: GameState, request: MoveRequest) -> bool:
         for validator in self._validators:
             if not validator.validate(state, request):
                 return False

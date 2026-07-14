@@ -221,7 +221,7 @@ below it:
   strategy class per piece kind, each answering "is this geometrically a
   legal move on this board?" with no notion of time. `rule_engine.py`
   chains together a list of `MoveValidator`s (piece exists → piece idle →
-  destination legal → geometry legal) into a `RuleEngine.can_move()` used as
+  destination legal → geometry legal) into a `RuleEngine.is_valid()` used as
   a gate before any move is allowed to *start*.
 - **`realtime`** — the clock-driven layer that makes this "kung fu" chess
   instead of classic chess. `Motion` and `JumpAction` are immutable records
@@ -292,7 +292,7 @@ tests/
   `PieceRule` class, and `default_rule_engine()` wires them into a
   `Dict[PieceKind, PieceRule]`. Adding a new piece type or house rule means
   adding one class, not editing a big conditional.
-- **Chain of responsibility for legality** — `RuleEngine.can_move()` runs a
+- **Chain of responsibility for legality** — `RuleEngine.is_valid()` runs a
   list of small, single-purpose `MoveValidator`s in order and short-circuits
   on the first failure, keeping "does this piece exist", "is it idle", "is
   the destination legal", and "is the geometry legal" independently

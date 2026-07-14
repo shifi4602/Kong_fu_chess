@@ -37,7 +37,7 @@ class GameEngine:
     def request_move(self, request: MoveRequest) -> bool:
         if self._state.is_over:
             return False
-        if self._rule_engine.can_move(self._state, request):
+        if self._rule_engine.is_valid(self._state, request):
             self._arbiter.start_motion(self._state, request.src, request.dst)
             return True
         return False

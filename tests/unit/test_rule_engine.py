@@ -98,7 +98,7 @@ def test_full_chain_valid_king_move():
     wk = Piece(id='wK', color=Color.WHITE, kind=PieceKind.KING, cell=Position(4, 4))
     board.place(wk, Position(4, 4))
     engine = default_rule_engine()
-    assert engine.can_move(state, MoveRequest(Position(4, 4), Position(4, 5)))
+    assert engine.is_valid(state, MoveRequest(Position(4, 4), Position(4, 5)))
 
 
 def test_full_chain_invalid_king_move():
@@ -107,14 +107,14 @@ def test_full_chain_invalid_king_move():
     wk = Piece(id='wK', color=Color.WHITE, kind=PieceKind.KING, cell=Position(4, 4))
     board.place(wk, Position(4, 4))
     engine = default_rule_engine()
-    assert not engine.can_move(state, MoveRequest(Position(4, 4), Position(4, 6)))
+    assert not engine.is_valid(state, MoveRequest(Position(4, 4), Position(4, 6)))
 
 
 def test_full_chain_no_piece():
     board = Board(8, 8)
     state = GameState(board=board)
     engine = default_rule_engine()
-    assert not engine.can_move(state, MoveRequest(Position(0, 0), Position(0, 1)))
+    assert not engine.is_valid(state, MoveRequest(Position(0, 0), Position(0, 1)))
 
 
 def test_full_chain_moving_piece_rejected():
@@ -124,7 +124,7 @@ def test_full_chain_moving_piece_rejected():
     wk.state = PieceState.MOVING
     board.place(wk, Position(4, 4))
     engine = default_rule_engine()
-    assert not engine.can_move(state, MoveRequest(Position(4, 4), Position(4, 5)))
+    assert not engine.is_valid(state, MoveRequest(Position(4, 4), Position(4, 5)))
 
 
 def test_move_validator_abstract_body():

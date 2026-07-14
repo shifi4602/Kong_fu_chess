@@ -1,5 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
+from typing import Tuple
 
 from kungfu_chess.model import Piece, Position
 
@@ -9,13 +10,10 @@ class Motion:
     piece: Piece
     src: Position
     dst: Position
+    path: Tuple[Position, ...]
     start_time: float
     duration: float
-
-    def is_complete(self, now: float) -> bool:
-        if now >= self.start_time + self.duration:
-            return True
-        return False
+    sequence: int
 
     def progress(self, now: float) -> float:
         elapsed = now - self.start_time
@@ -24,3 +22,10 @@ class Motion:
         if elapsed >= self.duration:
             return 1.0
         return elapsed / self.duration
+
+    @property
+    def step_duration(self) -> float:
+        return self.duration / len(self.path)
+
+    def entry_time(self, index: int) -> float:
+        return self.start_time + (index + 1) * self.step_duration
