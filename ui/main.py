@@ -31,6 +31,13 @@ from ui.rendering import (
     JumpIndicator,
 )
 
+# The engine has no concept of pixels -- `config.CELL_SIZE` is only ever
+# used as a default for the reference `BoardMapper`/tests. The UI is free
+# to pick its own on-screen cell size; 100px/cell (800x800 board + a 300px
+# sidebar = 1100x800 window) doesn't fit on a lot of screens, so we render
+# smaller instead.
+DISPLAY_CELL_SIZE = 70
+
 _STANDARD_START = """
 bR bN bB bQ bK bB bN bR
 bP bP bP bP bP bP bP bP
@@ -63,8 +70,8 @@ def build_canvas() -> Canvas:
     """
     return ImgCanvas(
         window_name="Kung Fu Chess",
-        width=config.CELL_SIZE * config.BOARD_COLS + SIDEBAR_WIDTH,
-        height=config.CELL_SIZE * config.BOARD_ROWS,
+        width=DISPLAY_CELL_SIZE * config.BOARD_COLS + SIDEBAR_WIDTH,
+        height=DISPLAY_CELL_SIZE * config.BOARD_ROWS,
     )
 
 
@@ -79,23 +86,23 @@ def run_game_loop(engine: GameEngine, canvas: Canvas) -> None:
     frame_clock = FrameClock(target_fps=config.FPS)
 
     board = engine.get_snapshot().board
-    board_width = config.CELL_SIZE * config.BOARD_COLS
-    board_height = config.CELL_SIZE * config.BOARD_ROWS
-    board_mapper = BoardMapper(cell_size=config.CELL_SIZE, rows=board.rows, cols=board.cols)
-    mapper = CoordinateMapper(board_mapper, config.CELL_SIZE)
-    loader = SpriteLoader(canvas, config.CELL_SIZE)
+    board_width = DISPLAY_CELL_SIZE * config.BOARD_COLS
+    board_height = DISPLAY_CELL_SIZE * config.BOARD_ROWS
+    board_mapper = BoardMapper(cell_size=DISPLAY_CELL_SIZE, rows=board.rows, cols=board.cols)
+    mapper = CoordinateMapper(board_mapper, DISPLAY_CELL_SIZE)
+    loader = SpriteLoader(canvas, DISPLAY_CELL_SIZE)
 
     board_image = canvas.load_image(BOARD_IMAGE, size=(board_width, board_height))
     sidebar_background = canvas.blank_image(board_width + SIDEBAR_WIDTH, board_height, color=(24, 24, 24))
     background = canvas.compose(sidebar_background, board_image, 0, 0)
 
     renderer = BoardRenderer(canvas, background)
-    highlight = HighlightRenderer(canvas, mapper, config.CELL_SIZE)
+    highlight = HighlightRenderer(canvas, mapper, DISPLAY_CELL_SIZE)
     scene = SceneBuilder(canvas, mapper, loader)
     hud = HudRenderer(canvas, board_pixel_width=board_width)
     game_over_banner = GameOverBanner(canvas, board_width, board_height)
-    capture_flash = CaptureFlash(canvas, mapper, config.CELL_SIZE)
-    jump_indicator = JumpIndicator(canvas, mapper, config.CELL_SIZE)
+    capture_flash = CaptureFlash(canvas, mapper, DISPLAY_CELL_SIZE)
+    jump_indicator = JumpIndicator(canvas, mapper, DISPLAY_CELL_SIZE)
 
     controller = Controller(engine, board_mapper)
     mouse_adapter = MouseAdapter(controller)
