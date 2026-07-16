@@ -5,6 +5,9 @@ never modified -- this package is a pure consumer of
 `GameEngine.get_snapshot()` and drives input through the engine's own
 `kungfu_chess.input.Controller`.
 
+See **[ARCHITECTURE.md](ARCHITECTURE.md)** for a full walkthrough of every
+package, the per-frame data flow, and the design decisions behind them.
+
 ## Running it
 
 ```
