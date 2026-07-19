@@ -21,9 +21,11 @@ _GOLD_TEXT = (0, 215, 255, 255)
 class HudRenderer:
     def __init__(self, canvas: Canvas, board_pixel_width: int) -> None:
         self._canvas = canvas
+        # magic number 16 is the padding between the board and the sidebar
         self._x = board_pixel_width + 16
 
     def draw(self, player_labels: PlayerLabels, score_panel: ScorePanel, move_log: MoveLogPanel) -> None:
+        # 30 is the padding between the top of the canvas and the first line of text
         y = 30
         self._canvas.draw_text("White", self._x, y, font_size=0.7, color=_WHITE_TEXT)
         y += _LINE_HEIGHT
@@ -41,6 +43,7 @@ class HudRenderer:
             )
             y += _LINE_HEIGHT * 2
 
+        # 15 is the padding between the winner text and the move log
         self._canvas.draw_text("Moves:", self._x, y, font_size=0.6, color=_WHITE_TEXT)
         y += _LINE_HEIGHT
         for entry in move_log.entries[-15:]:
