@@ -1,0 +1,42 @@
+[importlinter]
+root_packages =
+    kungfu_chess
+    ui
+    server
+    texttests
+include_external_packages = True
+
+[importlinter:contract:engine-is-independent]
+name = The engine never depends on anything that consumes it
+type = forbidden
+source_modules =
+    kungfu_chess
+forbidden_modules =
+    ui
+    server
+
+[importlinter:contract:server-layers]
+name = Server package layering is one-way
+type = layers
+layers =
+    server.main
+    server.handlers | server.matchmaking
+    server.session
+    server.transport | server.bus
+    server.protocol | server.persistence
+
+[importlinter:contract:graded-path-is-network-free]
+name = The graded text-protocol path never grows a network dependency
+type = forbidden
+source_modules =
+    texttests
+    kungfu_chess
+forbidden_modules =
+    server
+    websockets
+# Note: root-level main.py is a bare module, not a package, so import-linter
+# 2.x (which requires root_packages entries to be packages with __init__.py)
+# can't name it as a source_modules entry. It has no import-time dependency
+# on server/websockets today (verified by reading it directly, §2 of this
+# plan); this contract covers texttests + kungfu_chess, the part it CAN
+# check mechanically.
