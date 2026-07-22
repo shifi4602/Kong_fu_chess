@@ -1132,8 +1132,15 @@ Naming these beats letting them surface as surprises later:
    extra framework). Confirm before adding it to project dependencies.
 2. Where does the client (`ui/`) get its network layer, and where does
    `ClockEstimator` (§8) physically live? Out of scope for this plan —
-   needs its own `ui/net/` plan; this document only fixes the wire
-   contract it depends on.
+   answered in [`docs/UI_NET_PLAN.md`](UI_NET_PLAN.md), which also
+   requires moving this plan's `server/protocol/` package to a top-level
+   `protocol/` package (its §1) so `ui/` never has to import `server/` to
+   reach the wire records. That doc's §5 also flags a `state_mapper.py`
+   dependency worth folding back into this plan's §4 before phase 2 of
+   §14 starts: it must serialize the same `board ∪ motions ∪ jumps`
+   piece union `ui/animation/scene_builder.py` already computes, not
+   `GameSnapshot.board.all_pieces()` alone, or a piece captured mid-flight
+   won't round-trip correctly to a networked client.
 3. Exact `heartbeat_interval_ms`/`heartbeat_timeout_ms` defaults (§12
    ships `2000`/`8000` as a starting guess) — worth revisiting once
    stage 4's 20-second auto-resign window is designed, so the countdown
