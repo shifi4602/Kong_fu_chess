@@ -8,3 +8,4 @@ class ErrorCode(Enum):
     UNKNOWN_COMMAND = "unknown_command"
     MALFORMED_MESSAGE = "malformed_message"
     RATE_LIMITED = "rate_limited"
+    INVALID_CREDENTIALS = "invalid_credentials"

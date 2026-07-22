@@ -13,8 +13,22 @@ fully local, in-process `kungfu_chess.engine.GameEngine` (`ui/main.py`'s
 (`ui/main.py:53-176`, `ui/input/controller.py`, `ui/animation/scene_builder.py:40-70`,
 `kungfu_chess/engine/game_engine.py`, `kungfu_chess/realtime/real_time_arbiter.py`,
 `server/protocol/{commands,events,state_records,codec}.py`,
-`server/config.py`) was read directly from this repository this session,
-not inferred from a template.
+`server/config.py`, `server/handlers/join_handler.py`) was read directly
+from this repository this session, not inferred from a template.
+
+**Updated after `docs/SQLITE_PERSISTENCE_PLAN.md` landed in code.**
+`server/protocol/commands.py`'s `JoinCommand` now carries a mandatory
+`password: str` (register-or-login, decided by `JoinHandler.handle()` —
+`server/handlers/join_handler.py:38-56`), and `ErrorCode.INVALID_CREDENTIALS`
+is real. Two consequences for this plan, folded in below: `ClientConfig`
+needs a `password` field (§3, §9), and — the more important one —
+**`JoinHandler.handle()` sends the first joiner in a session no
+acknowledgment at all** (`join_handler.py:58-64`: `if result is None:
+return`, no event, since `WelcomeEvent` only means something once a color
+is assigned at pairing). `NetworkClient.connect()` must not block waiting
+for a `WelcomeEvent` — a solo first player would hang forever. §7/§9/§10
+below reflect this; it wasn't visible when this plan's first draft was
+written, since `join_handler.py` hadn't been read yet.
 
 ## 0. The one hard constraint this plan is built around
 
@@ -110,6 +124,29 @@ Nothing under `ui/animation/`, `ui/rendering/`, `ui/hud/`,
 `ui/input/mouse_adapter.py`, or `ui/events/` appears in this list —
 per §0, none of them change.
 
+```python
+# ui/net/client_config.py — mirrors server/config.py's ServerConfig: a
+# validated dataclass, not bare constants, for exactly the same reason
+# (values vary by deployment; a missing password shouldn't fail silently).
+@dataclass(frozen=True)
+class ClientConfig:
+    uri: str
+    username: str
+    password: str                        # required — JoinCommand has no default, see the note at the top of this doc
+    heartbeat_interval_ms: int = 2000     # matches ServerConfig's default; not required to match, just sensible
+    connect_timeout_s: float = 5.0
+
+    def __post_init__(self) -> None:
+        if not self.uri:
+            raise ValueError("uri must be non-empty")
+        if not self.username:
+            raise ValueError("username must be non-empty")
+        if not self.password:
+            raise ValueError("password must be non-empty")
+        if self.heartbeat_interval_ms <= 0:
+            raise ValueError("heartbeat_interval_ms must be positive")
+```
+
 ## 4. `RemoteGameEngine`: the Adapter
 
 ```python
@@ -151,9 +188,20 @@ class RemoteGameEngine:
             self._latest_snapshot = hydrate(event, self._clock)   # §5
         elif isinstance(event, HeartbeatEvent):
             self._clock.observe(event)                       # §6
+        elif isinstance(event, ErrorEvent) and event.reason is ErrorCode.INVALID_CREDENTIALS:
+            raise AuthenticationError(event.reason)           # fatal — see §7, §10
         elif isinstance(event, (MoveRejectedEvent, ErrorEvent)):
             pass  # logged by NetworkClient already (§7's ActivityLogger-style trace); no popup UI in this milestone
         # PlayerJoinedEvent, GameOverEvent: already implied by the next StateEvent.winner / a 2nd player's presence
+
+
+class AuthenticationError(Exception):
+    """Raised from tick() when the server rejects this connection's
+    JoinCommand credentials (docs/SQLITE_PERSISTENCE_PLAN.md §8). Deliberately
+    propagates uncaught through Controller.on_tick() -> run_game_loop()
+    (ui/main.py:126, untouched per §0) rather than being swallowed here —
+    see §10's "no graceful login-failure UX" limitation.
+    """
 ```
 
 `request_move`/`request_jump` returning `True` unconditionally is a
@@ -282,7 +330,15 @@ class NetworkClient:
 
     def connect(self) -> None:
         self._thread.start()
-        # blocks briefly until the loop + websocket handshake are ready, or raises on failure — see §10
+        # Blocks only until the WS handshake itself completes (or raises
+        # ConnectionRefusedError/OSError on failure) — see §10. Deliberately
+        # does NOT wait for a WelcomeEvent: JoinHandler.handle() sends the
+        # first joiner in a session no acknowledgment at all
+        # (server/handlers/join_handler.py:58-64), so blocking on Welcome
+        # would hang forever for a solo first player. A rejected password
+        # surfaces later, asynchronously, as an AuthenticationError raised
+        # from RemoteGameEngine.tick() (§4) once the resulting ErrorEvent
+        # is drained — not from connect() itself.
 
     def send(self, command: object) -> None:
         raw = codec.encode(command)
@@ -307,7 +363,11 @@ class NetworkClient:
     async def _connect_and_read(self) -> None:
         async with websockets.connect(self._config.uri) as ws:
             self._websocket = ws
-            self.send(JoinCommand(trace_id=str(uuid.uuid4()), username=self._config.username))
+            self.send(JoinCommand(
+                trace_id=str(uuid.uuid4()),
+                username=self._config.username,
+                password=self._config.password,   # register-or-login; see the note at the top of this doc
+            ))
             async for raw in ws:
                 self._incoming.put(codec.decode_event(raw))
 ```
@@ -347,7 +407,7 @@ def build_remote_engine(client_config: ClientConfig) -> RemoteGameEngine:
 def main() -> None:
     args = _parse_args()                                 # argparse, same style as ui/tests/manual/*.py
     if args.server:
-        engine = build_remote_engine(ClientConfig(uri=args.server, username=args.username))
+        engine = build_remote_engine(ClientConfig(uri=args.server, username=args.username, password=args.password))
     else:
         engine = build_engine()                           # today's fully local path — still the default
     ...
@@ -377,14 +437,32 @@ rediscover mid-implementation:
   server-authoritative game with a low-latency local network target
   (classroom/LAN); revisit only if perceived input lag is a measured
   problem, not a speculative one.
-- **`connect()` blocking the composition root.** `NetworkClient.connect()`
-  waits for the handshake before `main()` proceeds to build the canvas —
-  simplest possible startup sequencing, at the cost of the window not
-  opening until the server responds. A connecting/error splash screen is
-  a `ui/hud/` addition, explicitly out of scope here.
-- **Cleartext `ws://`, no auth on the client either.** Same acceptance as
-  `docs/SERVER_PLAN.md` §16 — fine for local/classroom use, flagged so it
-  isn't forgotten if this ever leaves localhost.
+- **`connect()` blocking the composition root, but only for the TCP/WS
+  handshake.** `NetworkClient.connect()` waits for the socket to open
+  before `main()` proceeds to build the canvas, but — per §7 — does
+  **not** wait for a `WelcomeEvent`, since a solo first joiner legitimately
+  never gets one until a second player pairs
+  (`server/handlers/join_handler.py:58-64`). Simplest possible startup
+  sequencing at the cost of the window not opening until the server is at
+  least reachable. A connecting/error splash screen is a `ui/hud/`
+  addition, explicitly out of scope here.
+- **No graceful login-failure UX.** A rejected password
+  (`ErrorCode.INVALID_CREDENTIALS`, `docs/SQLITE_PERSISTENCE_PLAN.md` §8)
+  surfaces as an uncaught `AuthenticationError` propagating out of
+  `RemoteGameEngine.tick()` through `Controller.on_tick()` and crashing
+  `run_game_loop` with a traceback (§4) — not a HUD message, not a retry
+  prompt. Correct (the game never renders against an unauthenticated
+  connection) but not friendly. `docs/SQLITE_PERSISTENCE_PLAN.md` §13
+  flags this exact gap from the server side ("full login UX ... undesigned
+  ... the `ui/net/` client-side plan owns how that's presented") — this is
+  that plan owning it, by explicitly deferring it rather than guessing at
+  a UI treatment now.
+- **Cleartext `ws://`, password sent in the clear inside `JoinCommand`.**
+  Same acceptance as `docs/SERVER_PLAN.md` §16 and
+  `docs/SQLITE_PERSISTENCE_PLAN.md` §7/§13 — fine for local/classroom use,
+  flagged so it isn't forgotten if this ever leaves localhost; revisit
+  transport (`wss://`) and server-side hashing (`argon2`) together, not
+  separately.
 - **`ClockEstimator`'s smoothing constant (`0.2` above) is a guess,** not
   measured — same "tune once real jitter is observable" caveat
   `docs/SERVER_PLAN.md` §16 already applies to its own server-side
@@ -442,7 +520,12 @@ the asyncio/socket shell gets one real integration test:
   `send()` calls, `drain()` returns a pre-loaded list) — proves
   `request_move`/`tick`/`get_snapshot` wiring without any real I/O, same
   `FakeConnection`-style substitution `docs/SERVER_PLAN.md` §13 uses
-  server-side.
+  server-side. Also proves: a drained `ErrorEvent(reason=INVALID_CREDENTIALS)`
+  raises `AuthenticationError` from `tick()`; a drained `MoveRejectedEvent`
+  does not raise anything.
+- `NetworkClient.connect()` does not block on a `WelcomeEvent` — proven
+  against a fake/real server that never pairs a second player: `connect()`
+  still returns once the handshake completes.
 - `NetworkClient` itself — one real integration test: start a real
   `server.main.run_server` (or the existing test harness for it) in the
   same process/event loop, connect a real `NetworkClient`, assert a sent
@@ -484,10 +567,25 @@ phase touches `kungfu_chess/`, `ui/animation/`, `ui/rendering/`,
    interval — same "not knowable from design alone, tune once real
    network jitter is observable" caveat `docs/SERVER_PLAN.md` §16/§17
    already applies to the server's own timing constants.
-4. Should `RemoteGameEngine`'s dropped `MoveRejectedEvent`/`ErrorEvent`
-   (§4's `_apply`, currently a silent `pass`) surface anywhere visible —
-   a HUD toast, a console line? Left undesigned; today's local
-   `Controller` has no equivalent concept (a local move is either legal
-   or the click is simply ignored), so there's no existing UI pattern to
+4. Should `RemoteGameEngine`'s dropped `MoveRejectedEvent`/non-fatal
+   `ErrorEvent` (§4's `_apply`, currently a silent `pass`) surface anywhere
+   visible — a HUD toast, a console line? Left undesigned; today's local
+   `Controller` has no equivalent concept (a local move is either legal or
+   the click is simply ignored), so there's no existing UI pattern to
    extend. Worth a real decision once this is actually being played
-   against a real server, not speculated here.
+   against a real server, not speculated here. (Login failure is no longer
+   part of this question — §4/§10 now make `INVALID_CREDENTIALS` fatal by
+   design, not silent.)
+5. A crash-on-bad-password is correct but blunt (§10). Once there's an
+   actual login UI (a username/password prompt, presumably `ui/hud/` or a
+   pre-game screen — not designed by this document or
+   `docs/SQLITE_PERSISTENCE_PLAN.md`), `AuthenticationError` should
+   probably be caught at that layer and re-prompt instead of propagating
+   into a crash. Not designed here — no login UI exists yet to catch it.
+6. `JoinHandler`'s first-joiner-waits-silently behavior (§0's update note)
+   means a solo player's window shows an empty/waiting board with no
+   confirmation they're even connected correctly. A "waiting for
+   opponent..." HUD state would need `PlayerJoinedEvent`'s absence to be
+   observable, which it already is (`RemoteGameEngine` just never gets one)
+   — but building that indicator is a `ui/hud/` addition, out of scope
+   here.

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
 from server.config import ServerConfig
 from server.session.game_session import GameSession
+from server.session.player_session import PlayerSession
+from server.transport.connection import Connection
 
 
 class SessionRegistry:
@@ -18,11 +20,13 @@ class SessionRegistry:
         self._config = config
         self._sessions: Dict[str, GameSession] = {}
         self._session_id_by_connection: Dict[str, str] = {}
+        self._session_id_by_username: Dict[str, str] = {}
 
     def add(self, session: GameSession) -> None:
         self._sessions[session.session_id] = session
         for connection_id in session.player_ids:
             self._session_id_by_connection[connection_id] = session.session_id
+            self._session_id_by_username[session.player_for(connection_id).username] = session.session_id
 
     def get(self, session_id: str) -> GameSession | None:
         return self._sessions.get(session_id)
@@ -32,6 +36,35 @@ class SessionRegistry:
         if session_id is None:
             return None
         return self._sessions.get(session_id)
+
+    def find_session_for_username(self, username: str) -> GameSession | None:
+        session_id = self._session_id_by_username.get(username)
+        if session_id is None:
+            return None
+        return self._sessions.get(session_id)
+
+    def reconnect(
+        self, username: str, connection: Connection, now_ms: int
+    ) -> Optional[Tuple[GameSession, PlayerSession]]:
+        """Looks up `username`'s in-progress session (by the index above)
+        and rebinds it to `connection` via `GameSession.reconnect()`,
+        keeping `_session_id_by_connection` in step with the new
+        connection id. Returns `None` if `username` has no in-progress
+        session (never joined one, or it already finished) — the caller
+        (`JoinHandler`) then falls through to normal matchmaking.
+        """
+        session = self.find_session_for_username(username)
+        if session is None:
+            return None
+        player = session.reconnect(username, connection, now_ms)
+        if player is None:
+            return None
+        self._session_id_by_connection = {
+            cid: sid for cid, sid in self._session_id_by_connection.items() if sid != session.session_id
+        }
+        for connection_id in session.player_ids:
+            self._session_id_by_connection[connection_id] = session.session_id
+        return session, player
 
     def __len__(self) -> int:
         return len(self._sessions)
@@ -52,3 +85,4 @@ class SessionRegistry:
             session = self._sessions.pop(session_id)
             for connection_id in session.player_ids:
                 self._session_id_by_connection.pop(connection_id, None)
+                self._session_id_by_username.pop(session.player_for(connection_id).username, None)

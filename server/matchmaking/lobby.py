@@ -36,11 +36,19 @@ class Lobby:
         self._waiting: List[Waiter] = []
 
     def join(
-        self, connection: Connection, username: str, trace_id: str, now_ms: int
+        self, connection: Connection, username: str, trace_id: str, now_ms: int, rating: int
     ) -> Optional[PairingResult]:
-        self._waiting.append(Waiter(connection=connection, username=username, trace_id=trace_id))
+        self._waiting.append(
+            Waiter(
+                connection=connection,
+                username=username,
+                trace_id=trace_id,
+                rating=rating,
+                joined_at_ms=now_ms,
+            )
+        )
 
-        match = self._strategy.try_match(self._waiting)
+        match = self._strategy.try_match(self._waiting, now_ms)
         if match is None:
             return None
 
@@ -64,3 +72,12 @@ class Lobby:
             white_trace_id=first.trace_id,
             black_trace_id=second.trace_id,
         )
+
+    def remove_waiter(self, connection_id: str) -> None:
+        """Drops a still-queued (never paired) connection from the queue —
+        called on disconnect so a dead connection is never handed to
+        `try_match` as if it were still available (§9.6's "solo joiner who
+        never gets matched" gap, closed now that stage 4 makes the queue
+        long-lived instead of momentary).
+        """
+        self._waiting = [w for w in self._waiting if w.connection.id != connection_id]

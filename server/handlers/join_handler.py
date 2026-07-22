@@ -7,9 +7,11 @@ from kungfu_chess.model import Color
 from server.bus.event_bus import EventBus
 from server.bus.topics import OUTBOUND
 from server.clock import WallClock
-from server.persistence.user_repository import UserRepository
+from server.persistence.user_repository import InvalidCredentialsError, UserRepository
 from server.protocol.commands import JoinCommand
-from server.protocol.events import PlayerJoinedEvent, WelcomeEvent
+from server.protocol.errors import ErrorCode
+from server.protocol.events import ErrorEvent, PlayerJoinedEvent, WelcomeEvent
+from server.session.session_registry import SessionRegistry
 from server.transport.connection import Connection
 from server.transport.outbound_message import OutboundMessage
 
@@ -28,16 +30,59 @@ class _JoinLobby(Protocol):
 
 
 class JoinHandler:
-    def __init__(self, lobby: _JoinLobby, users: UserRepository, bus: EventBus, wall_clock: WallClock) -> None:
+    def __init__(
+        self,
+        lobby: _JoinLobby,
+        users: UserRepository,
+        bus: EventBus,
+        wall_clock: WallClock,
+        registry: SessionRegistry,
+    ) -> None:
         self._lobby = lobby
         self._users = users
         self._bus = bus
         self._wall_clock = wall_clock
+        self._registry = registry
 
     def handle(self, connection: Connection, cmd: JoinCommand) -> None:
-        self._users.register(cmd.username)
+        try:
+            if self._users.get(cmd.username) is None:
+                account = self._users.create_account(cmd.username, cmd.password)
+            else:
+                account = self._users.authenticate(cmd.username, cmd.password)
+        except InvalidCredentialsError:
+            self._bus.publish(
+                OUTBOUND,
+                OutboundMessage.unicast(
+                    ErrorEvent(
+                        trace_id=cmd.trace_id,
+                        connection_id=connection.id,
+                        reason=ErrorCode.INVALID_CREDENTIALS,
+                    ),
+                    connection.id,
+                ),
+            )
+            return
 
-        result = self._lobby.join(connection, cmd.username, cmd.trace_id, self._wall_clock.now_ms())
+        now_ms = self._wall_clock.now_ms()
+
+        # "If he comes back, the game continues like it was" — a username
+        # with an in-progress GameSession reconnects to it instead of
+        # entering matchmaking again (docs/SERVER_PLAN.md §16's
+        # deliberately-deferred "reconnect identity", closed here).
+        reconnected = self._registry.reconnect(cmd.username, connection, now_ms)
+        if reconnected is not None:
+            _, player = reconnected
+            self._bus.publish(
+                OUTBOUND,
+                OutboundMessage.unicast(
+                    WelcomeEvent(trace_id=cmd.trace_id, connection_id=player.id, color=player.color),
+                    player.id,
+                ),
+            )
+            return
+
+        result = self._lobby.join(connection, cmd.username, cmd.trace_id, now_ms, account.elo_rating)
         if result is None:
             # First joiner: waits silently. Stage 1's closed event set
             # (§5) has no "waiting" acknowledgment — WelcomeEvent is only

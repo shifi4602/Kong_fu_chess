@@ -90,7 +90,9 @@ def test_join_is_exempt_from_rate_limiting():
 
     for i in range(3):
         dispatcher.dispatch(
-            InboundMessage(connection=connection, command=JoinCommand(trace_id=f"t{i}", username="alice"))
+            InboundMessage(
+                connection=connection, command=JoinCommand(trace_id=f"t{i}", username="alice", password="pw1")
+            )
         )
 
     assert len(join_handler.calls) == 3

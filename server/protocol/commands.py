@@ -9,6 +9,7 @@ from kungfu_chess.model import Position
 class JoinCommand:
     trace_id: str
     username: str
+    password: str
 
 
 @dataclass(frozen=True)

@@ -12,6 +12,7 @@ def test_defaults_are_valid():
     config = ServerConfig()
     assert config.host == "127.0.0.1"
     assert config.port == 8765
+    assert config.database_path == "kungfu_chess.db"
 
 
 @pytest.mark.parametrize(
@@ -29,6 +30,7 @@ def test_defaults_are_valid():
         ("max_commands_per_second", 0.0),
         ("command_burst", 0),
         ("max_frame_bytes", 0),
+        ("database_path", ""),
     ],
 )
 def test_invalid_scalar_values_raise(field, value):
@@ -54,12 +56,14 @@ def test_from_env_reads_overrides():
         "SERVER_PORT": "9000",
         "SERVER_TICK_HZ": "30",
         "SERVER_BROADCAST_HZ": "5",
+        "SERVER_DATABASE_PATH": "/tmp/test.db",
     }
     config = ServerConfig.from_env(env)
     assert config.host == "0.0.0.0"
     assert config.port == 9000
     assert config.tick_hz == 30.0
     assert config.broadcast_hz == 5.0
+    assert config.database_path == "/tmp/test.db"
 
 
 def test_from_env_defaults_when_missing():

@@ -14,7 +14,7 @@ from server.handlers.command_dispatcher import InboundMessage
 from server.main import build_server
 from server.protocol import codec
 from server.protocol.commands import HeartbeatCommand, JoinCommand, MoveCommand
-from server.protocol.events import HeartbeatEvent, PlayerJoinedEvent, StateEvent, WelcomeEvent
+from server.protocol.events import ErrorEvent, HeartbeatEvent, PlayerJoinedEvent, StateEvent, WelcomeEvent
 from server.scheduler import run_forever
 from server.transport import ws_server
 
@@ -25,7 +25,9 @@ async def _recv_event(ws):
 
 
 async def _run_join_move_state_heartbeat():
-    config = ServerConfig(host="127.0.0.1", port=0, tick_hz=100.0, broadcast_hz=50.0, max_step_ms=50)
+    config = ServerConfig(
+        host="127.0.0.1", port=0, tick_hz=100.0, broadcast_hz=50.0, max_step_ms=50, database_path=":memory:"
+    )
     wall_clock = SystemWallClock()
     bus, registry, dispatcher, broadcaster = build_server(config, wall_clock)
 
@@ -40,8 +42,8 @@ async def _run_join_move_state_heartbeat():
         try:
             uri = f"ws://127.0.0.1:{port}"
             async with websockets.connect(uri) as client1, websockets.connect(uri) as client2:
-                await client1.send(codec.encode(JoinCommand(trace_id="j1", username="alice")))
-                await client2.send(codec.encode(JoinCommand(trace_id="j2", username="bob")))
+                await client1.send(codec.encode(JoinCommand(trace_id="j1", username="alice", password="pw1")))
+                await client2.send(codec.encode(JoinCommand(trace_id="j2", username="bob", password="pw2")))
 
                 c1_msgs = [await _recv_event(client1) for _ in range(2)]
                 c2_msgs = [await _recv_event(client2) for _ in range(2)]
@@ -95,7 +97,7 @@ def test_end_to_end_join_move_tick_state_and_heartbeat():
 
 
 async def _run_oversized_frame_rejected():
-    config = ServerConfig(host="127.0.0.1", port=0, max_frame_bytes=64)
+    config = ServerConfig(host="127.0.0.1", port=0, max_frame_bytes=64, database_path=":memory:")
     wall_clock = SystemWallClock()
     bus, registry, dispatcher, broadcaster = build_server(config, wall_clock)
 
@@ -108,7 +110,7 @@ async def _run_oversized_frame_rejected():
         port = server.sockets[0].getsockname()[1]
         uri = f"ws://127.0.0.1:{port}"
         async with websockets.connect(uri) as client:
-            oversized = codec.encode(JoinCommand(trace_id="x" * 500, username="alice"))
+            oversized = codec.encode(JoinCommand(trace_id="x" * 500, username="alice", password="pw1"))
             assert len(oversized) > 64
             await client.send(oversized)
             with pytest.raises(websockets.exceptions.ConnectionClosed):
@@ -120,7 +122,7 @@ def test_oversized_frame_is_rejected_before_reaching_the_bus():
 
 
 async def _run_unknown_and_malformed_message_get_error_events():
-    config = ServerConfig(host="127.0.0.1", port=0)
+    config = ServerConfig(host="127.0.0.1", port=0, database_path=":memory:")
     wall_clock = SystemWallClock()
     bus, registry, dispatcher, broadcaster = build_server(config, wall_clock)
 
@@ -144,3 +146,51 @@ async def _run_unknown_and_malformed_message_get_error_events():
 
 def test_unknown_and_malformed_frames_get_error_events():
     asyncio.run(_run_unknown_and_malformed_message_get_error_events())
+
+
+async def _run_create_account_disconnect_reconnect():
+    config = ServerConfig(host="127.0.0.1", port=0, database_path=":memory:")
+    wall_clock = SystemWallClock()
+    bus, registry, dispatcher, broadcaster = build_server(config, wall_clock)
+
+    async with ws_server.serve(
+        config,
+        on_connect=broadcaster.register,
+        on_disconnect=broadcaster.unregister,
+        on_command=lambda connection, cmd: bus.publish(
+            INBOUND, InboundMessage(connection=connection, command=cmd)
+        ),
+    ) as server:
+        port = server.sockets[0].getsockname()[1]
+        uri = f"ws://127.0.0.1:{port}"
+
+        # alice creates her account on first join (no second player yet, so
+        # she just waits silently — no WelcomeEvent until paired).
+        async with websockets.connect(uri) as alice1:
+            await alice1.send(codec.encode(JoinCommand(trace_id="a1", username="alice", password="correct-horse")))
+            # Disconnects without ever being paired.
+
+        # alice reconnects with the WRONG password: rejected before pairing.
+        async with websockets.connect(uri) as alice_wrong:
+            await alice_wrong.send(
+                codec.encode(JoinCommand(trace_id="a2", username="alice", password="wrong-password"))
+            )
+            event = await _recv_event(alice_wrong)
+            assert isinstance(event, ErrorEvent)
+            assert event.reason.value == "invalid_credentials"
+
+        # alice reconnects with the CORRECT password, and bob joins too:
+        # both get paired normally.
+        async with websockets.connect(uri) as alice2, websockets.connect(uri) as bob:
+            await alice2.send(
+                codec.encode(JoinCommand(trace_id="a3", username="alice", password="correct-horse"))
+            )
+            await bob.send(codec.encode(JoinCommand(trace_id="b1", username="bob", password="pw2")))
+
+            alice_msgs = [await _recv_event(alice2) for _ in range(2)]
+            assert any(isinstance(e, WelcomeEvent) for e in alice_msgs)
+            assert any(isinstance(e, PlayerJoinedEvent) for e in alice_msgs)
+
+
+def test_reconnect_with_correct_password_succeeds_and_wrong_password_is_rejected():
+    asyncio.run(_run_create_account_disconnect_reconnect())

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import uuid
 from collections import deque
-from typing import Deque, Dict, Tuple
+from typing import Deque, Dict, Optional, Tuple
 
 from kungfu_chess.engine import GameEngine
+from kungfu_chess.model import Color
 from kungfu_chess.rules import MoveRequest
 
 from server.bus.event_bus import EventBus
@@ -16,9 +17,14 @@ from server.protocol.events import GameOverEvent, MoveRejectedEvent
 from server.session.manual_clock import ManualClock
 from server.session.player_session import ConnectionState, PlayerSession
 from server.session.state_mapper import snapshot_to_state_event
+from server.transport.connection import Connection
 from server.transport.outbound_message import OutboundMessage
 
 QueuedCommand = Tuple[str, object]  # (connection_id, MoveCommand | JumpCommand)
+
+
+def _other_color(color: Color) -> Color:
+    return Color.BLACK if color == Color.WHITE else Color.WHITE
 
 
 def _new_trace_id() -> str:
@@ -87,16 +93,22 @@ class GameSession:
 
         self._engine.tick()
         self._check_liveness(now_ms)
+        self._check_forfeits(now_ms)
 
         snapshot = self._engine.get_snapshot()
-        if snapshot.winner is not None and self._finished_at_ms is None:
-            self._finished_at_ms = self._engine_ms
-            self._broadcast(GameOverEvent(trace_id=_new_trace_id(), winner=snapshot.winner))
+        if snapshot.winner is not None:
+            self._finish(snapshot.winner)
 
         broadcast_interval_ms = 1000.0 / self._config.broadcast_hz
         if self._engine_ms - self._last_broadcast_ms >= broadcast_interval_ms:
             self._last_broadcast_ms = self._engine_ms
             self._broadcast(snapshot_to_state_event(snapshot))
+
+    def _finish(self, winner: Color) -> None:
+        if self._finished_at_ms is not None:
+            return
+        self._finished_at_ms = self._engine_ms
+        self._broadcast(GameOverEvent(trace_id=_new_trace_id(), winner=winner))
 
     def _drain_pending(self) -> None:
         while self._pending:
@@ -153,6 +165,70 @@ class GameSession:
                 and now_ms - player.last_heartbeat_ms > self._config.heartbeat_timeout_ms
             ):
                 player.state = ConnectionState.DISCONNECTED
+                player.disconnected_at_ms = now_ms
+
+    def _check_forfeits(self, now_ms: int) -> None:
+        """The countdown-and-auto-resign policy on top of the
+        Active -> Disconnected transition above (docs/SERVER_PLAN.md §6/§16,
+        §1's "20-second disconnect countdown"): once a disconnected player
+        has been gone for `disconnect_grace_ms`, the other player wins by
+        forfeit — "if not, it's like he missed the game." A reconnect
+        (`reconnect()` below) clears `disconnected_at_ms` before this ever
+        fires, so a player who comes back in time never forfeits.
+        """
+        if self.is_terminal:
+            return
+        for player in self._players.values():
+            if player.state != ConnectionState.DISCONNECTED or player.disconnected_at_ms is None:
+                continue
+            if now_ms - player.disconnected_at_ms >= self._config.disconnect_grace_ms:
+                player.state = ConnectionState.RESIGNED
+                self._finish(_other_color(player.color))
+                return
+
+    def mark_disconnected(self, connection_id: str, now_ms: int) -> None:
+        """Called from `handlers/disconnect_handler.py` the instant the
+        transport layer sees the socket close — faster and more reliable
+        than waiting for the heartbeat timeout (§8: "a WebSocket close
+        frame is not reliable enough to build [liveness] on alone", but
+        when it *does* arrive, acting on it immediately is strictly
+        better than waiting out `heartbeat_timeout_ms` first). A no-op if
+        `connection_id` no longer names a player in this session (already
+        reconnected under a new id) or the player isn't currently ACTIVE
+        (already marked disconnected by the heartbeat check, or already
+        resigned) — first detection wins, and re-detecting doesn't reset
+        the countdown.
+        """
+        player = self._players.get(connection_id)
+        if player is not None and player.state == ConnectionState.ACTIVE:
+            player.state = ConnectionState.DISCONNECTED
+            player.disconnected_at_ms = now_ms
+
+    def reconnect(self, username: str, connection: Connection, now_ms: int) -> Optional[PlayerSession]:
+        """Rebinds `username`'s player to a new `Connection` — "if he
+        comes back the game continues like it was" (docs/SERVER_PLAN.md
+        §16's "no reconnect identity" gap, closed here by matching on
+        username, exactly as that section anticipated). Returns the
+        rebound `PlayerSession` (its `.id` is now `connection.id`), or
+        `None` if this session has no player with that username, or the
+        session already finished (a finished game has nothing to
+        reconnect to — the reconnecting client just falls through to
+        `Lobby.join()` and starts a new match).
+        """
+        if self.is_terminal:
+            return None
+        for old_connection_id, player in list(self._players.items()):
+            if player.username != username:
+                continue
+            del self._players[old_connection_id]
+            player.connection = connection
+            player.id = connection.id
+            player.state = ConnectionState.ACTIVE
+            player.disconnected_at_ms = None
+            player.last_heartbeat_ms = now_ms
+            self._players[connection.id] = player
+            return player
+        return None
 
     def _unicast(self, connection_id: str, event: object) -> None:
         self._bus.publish(

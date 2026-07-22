@@ -26,7 +26,7 @@ def _roundtrip(record):
 
 
 def test_join_command_roundtrip():
-    _roundtrip(JoinCommand(trace_id="t1", username="alice"))
+    _roundtrip(JoinCommand(trace_id="t1", username="alice", password="hunter2"))
 
 
 def test_move_command_roundtrip():
@@ -154,7 +154,7 @@ def test_decode_command_rejects_event_type():
 
 
 def test_decode_event_rejects_command_type():
-    raw = codec.encode(JoinCommand(trace_id="t20", username="bob"))
+    raw = codec.encode(JoinCommand(trace_id="t20", username="bob", password="pw1"))
     with pytest.raises(codec.UnknownCommandError):
         codec.decode_event(raw)
 

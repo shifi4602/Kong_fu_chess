@@ -22,7 +22,7 @@ def _make_logger():
 def test_inbound_command_is_logged_with_direction_in_and_connection_id():
     bus, lines = _make_logger()
     connection = FakeConnection("c1")
-    cmd = JoinCommand(trace_id="t1", username="alice")
+    cmd = JoinCommand(trace_id="t1", username="alice", password="pw1")
 
     bus.publish(INBOUND, InboundMessage(connection=connection, command=cmd))
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Optional
 
 from kungfu_chess.model import Color
 
@@ -29,3 +30,4 @@ class PlayerSession:
     color: Color
     state: ConnectionState = ConnectionState.CONNECTING
     last_heartbeat_ms: int = 0
+    disconnected_at_ms: Optional[int] = None
