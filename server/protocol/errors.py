@@ -9,3 +9,6 @@ class ErrorCode(Enum):
     MALFORMED_MESSAGE = "malformed_message"
     RATE_LIMITED = "rate_limited"
     INVALID_CREDENTIALS = "invalid_credentials"
+    INVALID_ROOM_ID = "invalid_room_id"
+    ROOM_FULL = "room_full"
+    SPECTATOR_CANNOT_ACT = "spectator_cannot_act"

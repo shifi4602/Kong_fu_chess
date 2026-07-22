@@ -29,7 +29,7 @@ async def _run_join_move_state_heartbeat():
         host="127.0.0.1", port=0, tick_hz=100.0, broadcast_hz=50.0, max_step_ms=50, database_path=":memory:"
     )
     wall_clock = SystemWallClock()
-    bus, registry, dispatcher, broadcaster = build_server(config, wall_clock)
+    bus, registry, dispatcher, broadcaster, rooms = build_server(config, wall_clock)
 
     def on_command(connection, cmd):
         bus.publish(INBOUND, InboundMessage(connection=connection, command=cmd))
@@ -99,7 +99,7 @@ def test_end_to_end_join_move_tick_state_and_heartbeat():
 async def _run_oversized_frame_rejected():
     config = ServerConfig(host="127.0.0.1", port=0, max_frame_bytes=64, database_path=":memory:")
     wall_clock = SystemWallClock()
-    bus, registry, dispatcher, broadcaster = build_server(config, wall_clock)
+    bus, registry, dispatcher, broadcaster, rooms = build_server(config, wall_clock)
 
     async with ws_server.serve(
         config,
@@ -124,7 +124,7 @@ def test_oversized_frame_is_rejected_before_reaching_the_bus():
 async def _run_unknown_and_malformed_message_get_error_events():
     config = ServerConfig(host="127.0.0.1", port=0, database_path=":memory:")
     wall_clock = SystemWallClock()
-    bus, registry, dispatcher, broadcaster = build_server(config, wall_clock)
+    bus, registry, dispatcher, broadcaster, rooms = build_server(config, wall_clock)
 
     async with ws_server.serve(
         config,
@@ -151,7 +151,7 @@ def test_unknown_and_malformed_frames_get_error_events():
 async def _run_create_account_disconnect_reconnect():
     config = ServerConfig(host="127.0.0.1", port=0, database_path=":memory:")
     wall_clock = SystemWallClock()
-    bus, registry, dispatcher, broadcaster = build_server(config, wall_clock)
+    bus, registry, dispatcher, broadcaster, rooms = build_server(config, wall_clock)
 
     async with ws_server.serve(
         config,

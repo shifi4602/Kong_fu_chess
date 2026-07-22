@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from collections import deque
-from typing import Deque, Dict, Optional, Tuple
+from typing import Deque, Dict, FrozenSet, Optional, Set, Tuple
 
 from kungfu_chess.engine import GameEngine
 from kungfu_chess.model import Color
@@ -59,6 +59,7 @@ class GameSession:
         self._last_now_ms = now_ms
         self._last_broadcast_ms = now_ms
         self._finished_at_ms: int | None = None
+        self._spectator_ids: Set[str] = set()
 
     @property
     def engine_ms(self) -> int:
@@ -68,8 +69,30 @@ class GameSession:
     def player_ids(self) -> list[str]:
         return list(self._players)
 
+    @property
+    def spectator_ids(self) -> FrozenSet[str]:
+        return frozenset(self._spectator_ids)
+
     def player_for(self, connection_id: str) -> PlayerSession:
         return self._players[connection_id]
+
+    def add_spectator(self, connection_id: str) -> None:
+        self._spectator_ids.add(connection_id)
+
+    def remove_spectator(self, connection_id: str) -> None:
+        self._spectator_ids.discard(connection_id)
+
+    def record_heartbeat(self, connection_id: str, now_ms: int) -> None:
+        """Updates `PlayerSession.last_heartbeat_ms` for a player; a no-op
+        for a spectator (they have no `PlayerSession`, and don't need
+        liveness/forfeit tracking — only the `HeartbeatEvent` reply itself,
+        which reads `engine_ms`, not this write). Also safe for a stale/
+        unknown id, which should never happen given `SessionRegistry`
+        only routes here for ids it already indexed.
+        """
+        player = self._players.get(connection_id)
+        if player is not None:
+            player.last_heartbeat_ms = now_ms
 
     @property
     def is_terminal(self) -> bool:
@@ -121,7 +144,17 @@ class GameSession:
                 raise TypeError(f"unsupported queued command: {type(command).__name__}")
 
     def _handle_move(self, connection_id: str, cmd: MoveCommand) -> None:
-        player = self._players[connection_id]
+        player = self._players.get(connection_id)
+        if player is None:
+            self._unicast(
+                connection_id,
+                MoveRejectedEvent(
+                    trace_id=cmd.trace_id,
+                    connection_id=connection_id,
+                    reason=ErrorCode.SPECTATOR_CANNOT_ACT,
+                ),
+            )
+            return
         piece = self._engine.get_snapshot().board.get(cmd.src)
         if piece is None or piece.color != player.color:
             self._unicast(
@@ -140,7 +173,17 @@ class GameSession:
             )
 
     def _handle_jump(self, connection_id: str, cmd: JumpCommand) -> None:
-        player = self._players[connection_id]
+        player = self._players.get(connection_id)
+        if player is None:
+            self._unicast(
+                connection_id,
+                MoveRejectedEvent(
+                    trace_id=cmd.trace_id,
+                    connection_id=connection_id,
+                    reason=ErrorCode.SPECTATOR_CANNOT_ACT,
+                ),
+            )
+            return
         piece = self._engine.get_snapshot().board.get(cmd.position)
         if piece is None or piece.color != player.color:
             self._unicast(
@@ -239,9 +282,10 @@ class GameSession:
         )
 
     def _broadcast(self, event: object) -> None:
+        recipients = list(self._players) + list(self._spectator_ids)
         self._bus.publish(
             OUTBOUND,
             OutboundMessage.broadcast(
-                event, self._players.keys(), session_id=self.session_id, engine_ms=self._engine_ms
+                event, recipients, session_id=self.session_id, engine_ms=self._engine_ms
             ),
         )

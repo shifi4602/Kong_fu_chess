@@ -8,9 +8,10 @@ from server.handlers.join_handler import JoinHandler
 from server.matchmaking.lobby import Lobby
 from server.matchmaking.strategy import FirstTwoJoinersStrategy
 from server.persistence.user_repository import InMemoryUserRepository
-from server.protocol.commands import JoinCommand
+from server.protocol.commands import JoinCommand, MatchMode
 from server.protocol.errors import ErrorCode
 from server.protocol.events import ErrorEvent, PlayerJoinedEvent, WelcomeEvent
+from server.rooms.room_registry import RoomRegistry
 from server.session.session_factory import GameSessionFactory
 from server.session.session_registry import SessionRegistry
 from server.transport.connection import FakeConnection
@@ -24,9 +25,10 @@ def _make_join_handler():
     registry = SessionRegistry(config)
     factory = GameSessionFactory(bus=bus, config=config)
     lobby = Lobby(strategy=FirstTwoJoinersStrategy(), factory=factory, registry=registry)
+    rooms = RoomRegistry(factory=factory, registry=registry, config=config)
     users = InMemoryUserRepository()
     clock = FakeWallClock(initial_ms=1000)
-    handler = JoinHandler(lobby=lobby, users=users, bus=bus, wall_clock=clock, registry=registry)
+    handler = JoinHandler(lobby=lobby, users=users, bus=bus, wall_clock=clock, registry=registry, rooms=rooms)
     return handler, received, users, registry
 
 

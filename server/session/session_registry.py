@@ -43,6 +43,12 @@ class SessionRegistry:
             return None
         return self._sessions.get(session_id)
 
+    def add_spectator(self, session_id: str, connection_id: str) -> None:
+        self._session_id_by_connection[connection_id] = session_id
+
+    def remove_spectator(self, connection_id: str) -> None:
+        self._session_id_by_connection.pop(connection_id, None)
+
     def reconnect(
         self, username: str, connection: Connection, now_ms: int
     ) -> Optional[Tuple[GameSession, PlayerSession]]:
@@ -86,3 +92,5 @@ class SessionRegistry:
             for connection_id in session.player_ids:
                 self._session_id_by_connection.pop(connection_id, None)
                 self._session_id_by_username.pop(session.player_for(connection_id).username, None)
+            for connection_id in session.spectator_ids:
+                self._session_id_by_connection.pop(connection_id, None)

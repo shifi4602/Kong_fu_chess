@@ -24,6 +24,8 @@ class ServerConfig:
     elo_match_base_window: int = 100
     elo_match_window_growth_per_second: float = 40.0
     elo_match_max_wait_ms: int = 60_000
+    max_spectators_per_room: int = 50
+    room_id_max_length: int = 32
 
     def __post_init__(self) -> None:
         if not (0 <= self.port <= 65535):
@@ -60,6 +62,10 @@ class ServerConfig:
             raise ValueError("elo_match_window_growth_per_second must be non-negative")
         if self.elo_match_max_wait_ms <= 0:
             raise ValueError("elo_match_max_wait_ms must be positive")
+        if self.max_spectators_per_room < 0:
+            raise ValueError("max_spectators_per_room must be non-negative")
+        if self.room_id_max_length < 1:
+            raise ValueError("room_id_max_length must be at least 1")
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> "ServerConfig":
@@ -105,5 +111,11 @@ class ServerConfig:
             ),
             elo_match_max_wait_ms=int(
                 env.get("SERVER_ELO_MATCH_MAX_WAIT_MS", defaults.elo_match_max_wait_ms)
+            ),
+            max_spectators_per_room=int(
+                env.get("SERVER_MAX_SPECTATORS_PER_ROOM", defaults.max_spectators_per_room)
+            ),
+            room_id_max_length=int(
+                env.get("SERVER_ROOM_ID_MAX_LENGTH", defaults.room_id_max_length)
             ),
         )

@@ -13,7 +13,7 @@ from .state_records import JumpRecord, MotionRecord, PieceRecord
 class WelcomeEvent:
     trace_id: str
     connection_id: str
-    color: Color
+    color: Optional[Color]  # None means "you are a spectator" — see docs/ROOMS_PLAN.md §3
 
 
 @dataclass(frozen=True)

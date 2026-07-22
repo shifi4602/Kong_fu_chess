@@ -20,7 +20,7 @@ name = Server package layering is one-way
 type = layers
 layers =
     server.main
-    server.handlers | server.matchmaking
+    server.handlers | server.matchmaking | server.rooms
     server.session
     server.transport | server.bus
     server.protocol | server.persistence

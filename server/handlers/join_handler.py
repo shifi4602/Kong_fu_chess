@@ -8,7 +8,7 @@ from server.bus.event_bus import EventBus
 from server.bus.topics import OUTBOUND
 from server.clock import WallClock
 from server.persistence.user_repository import InvalidCredentialsError, UserRepository
-from server.protocol.commands import JoinCommand
+from server.protocol.commands import JoinCommand, MatchMode
 from server.protocol.errors import ErrorCode
 from server.protocol.events import ErrorEvent, PlayerJoinedEvent, WelcomeEvent
 from server.session.session_registry import SessionRegistry
@@ -29,6 +29,19 @@ class _JoinLobby(Protocol):
         ...
 
 
+class _RoomJoiner(Protocol):
+    """Same structural seam as `_JoinLobby`, for `rooms.RoomRegistry` —
+    `server.rooms` is also a sibling of `server.handlers`
+    (docs/ROOMS_PLAN.md §14). The returned object is consumed by plain
+    attribute access in `_handle_room_join` below, never `isinstance`.
+    """
+
+    def join(
+        self, connection: Connection, username: str, trace_id: str, room_id: str, now_ms: int
+    ) -> object:
+        ...
+
+
 class JoinHandler:
     def __init__(
         self,
@@ -37,12 +50,14 @@ class JoinHandler:
         bus: EventBus,
         wall_clock: WallClock,
         registry: SessionRegistry,
+        rooms: _RoomJoiner,
     ) -> None:
         self._lobby = lobby
         self._users = users
         self._bus = bus
         self._wall_clock = wall_clock
         self._registry = registry
+        self._rooms = rooms
 
     def handle(self, connection: Connection, cmd: JoinCommand) -> None:
         try:
@@ -82,6 +97,10 @@ class JoinHandler:
             )
             return
 
+        if cmd.mode is MatchMode.ROOM:
+            self._handle_room_join(connection, cmd, now_ms)
+            return
+
         result = self._lobby.join(connection, cmd.username, cmd.trace_id, now_ms, account.elo_rating)
         if result is None:
             # First joiner: waits silently. Stage 1's closed event set
@@ -111,3 +130,38 @@ class JoinHandler:
                 (result.white.id, result.black.id),
             ),
         )
+
+    def _handle_room_join(self, connection: Connection, cmd: JoinCommand, now_ms: int) -> None:
+        outcome = self._rooms.join(connection, cmd.username, cmd.trace_id, cmd.room_id or "", now_ms)
+
+        if outcome.error is not None:
+            self._unicast(ErrorEvent(trace_id=cmd.trace_id, connection_id=connection.id, reason=outcome.error), connection.id)
+            return
+
+        if outcome.game_started:
+            self._unicast(
+                WelcomeEvent(trace_id=outcome.white_trace_id, connection_id=outcome.white.id, color=Color.WHITE),
+                outcome.white.id,
+            )
+            self._unicast(
+                WelcomeEvent(trace_id=outcome.black_trace_id, connection_id=outcome.black.id, color=Color.BLACK),
+                outcome.black.id,
+            )
+            for spectator_id in outcome.attached_spectator_ids:
+                self._unicast(
+                    WelcomeEvent(trace_id=cmd.trace_id, connection_id=spectator_id, color=None), spectator_id
+                )
+            recipients = (outcome.white.id, outcome.black.id, *outcome.attached_spectator_ids)
+            self._broadcast(PlayerJoinedEvent(trace_id=outcome.black_trace_id, color=Color.BLACK), recipients)
+            return
+
+        # Seated as the room's first player (color=WHITE) or as a
+        # spectator (color=None) — both get an immediate ack, deliberately
+        # unlike quick-match's silent first joiner (docs/ROOMS_PLAN.md §11).
+        self._unicast(WelcomeEvent(trace_id=cmd.trace_id, connection_id=connection.id, color=outcome.color), connection.id)
+
+    def _unicast(self, event: object, connection_id: str) -> None:
+        self._bus.publish(OUTBOUND, OutboundMessage.unicast(event, connection_id))
+
+    def _broadcast(self, event: object, connection_ids) -> None:
+        self._bus.publish(OUTBOUND, OutboundMessage.broadcast(event, connection_ids))

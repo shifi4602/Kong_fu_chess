@@ -27,8 +27,7 @@ class HeartbeatHandler:
         if session is None:
             return
 
-        player = session.player_for(connection.id)
-        player.last_heartbeat_ms = self._wall_clock.now_ms()
+        session.record_heartbeat(connection.id, self._wall_clock.now_ms())
 
         self._bus.publish(
             OUTBOUND,

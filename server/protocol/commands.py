@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
+from typing import Optional
 
 from kungfu_chess.model import Position
+
+
+class MatchMode(Enum):
+    QUICK_MATCH = "quick_match"
+    ROOM = "room"
 
 
 @dataclass(frozen=True)
@@ -10,6 +17,8 @@ class JoinCommand:
     trace_id: str
     username: str
     password: str
+    mode: MatchMode = MatchMode.QUICK_MATCH
+    room_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
