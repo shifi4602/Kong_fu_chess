@@ -8,6 +8,15 @@ real-time arbiter, board (de)serialization, input handling, and a small
 scriptable command runner (`main.py`) that drives the whole pipeline from a
 plain-text protocol, which is convenient for testing and automation.
 
+The repository has three components that each depend on the engine but
+never on each other:
+
+| Component | Package | Docs |
+|---|---|---|
+| Engine (rules, real-time arbiter, text protocol) | `kungfu_chess/`, `main.py` | this file |
+| Desktop UI (OpenCV window, animations, HUD) | `ui/` | [`docs/README.md`](docs/README.md) |
+| Multiplayer WebSocket server (rooms, matchmaking, accounts, SQLite) | `server/` | [Server](#server) below |
+
 ## Table of contents
 
 - [Rules of the game](#rules-of-the-game)
@@ -15,6 +24,7 @@ plain-text protocol, which is convenient for testing and automation.
 - [Architecture](#architecture)
 - [Package layout](#package-layout)
 - [Design notes](#design-notes)
+- [Server](#server)
 - [Getting started](#getting-started)
 - [Running the tests](#running-the-tests)
 
@@ -281,9 +291,26 @@ kungfu_chess/
 main.py                  # stdin/stdout command-driven entry point
 texttests/                # .kfc script parser + runner (alternate test harness)
 tests/
-├── unit/                 # one test module per source module
+├── unit/                 # one test module per kungfu_chess source file
 ├── integration/          # .kfc scenario scripts + runner test
+├── server/               # server/ test suite — see Server, below
 └── test_main_pipeline.py # tests for main.py's stdin/stdout pipeline
+
+ui/                      # desktop OpenCV UI — see docs/README.md
+├── net/                  # placeholder for the not-yet-built networked client (see Server, below)
+└── ...                   # platform/rendering/animation/hud/input/events — documented in docs/README.md
+
+server/                  # multiplayer WebSocket server — see Server, below
+├── main.py, config.py, scheduler.py, clock.py
+├── protocol/             # wire Commands/Events + codec
+├── bus/, transport/       # sync EventBus; asyncio websocket transport
+├── session/                # GameSession.advance(), SessionRegistry, PlayerSession
+├── matchmaking/, rooms/      # ELO-window quick match; room + spectator flow
+├── handlers/                 # CommandDispatcher, join/move/jump/heartbeat/disconnect handlers, RateLimiter
+├── persistence/, results/      # SQLite accounts/games, ELO, GameResultRecorder
+└── logging_/                    # structured activity logging
+
+docs/                     # architecture plans and the UI's own README
 ```
 
 ## Design notes
@@ -316,13 +343,85 @@ tests/
   turns a normal chess rule set into a real-time game with almost no
   duplicated logic.
 
-## Getting started
+## Server
 
-Requires Python 3.10+ (developed against 3.14) and `pytest` (+
-`pytest-cov` for coverage).
+`server/` is a real-time, authoritative WebSocket game server built on
+top of the same `kungfu_chess` engine — a separate OS process
+(`python -m server.main`) that never imports `ui/` and is never imported
+by it. It exists so two players on different machines can play the same
+game the engine already models locally; `kungfu_chess/` itself has no
+idea it's being driven over a network instead of by `main.py` or
+`ui/main.py`.
+
+**What it does today:**
+
+- **Accounts** — `JoinCommand` doubles as register-or-login. Passwords
+  are hashed with PBKDF2-HMAC-SHA256 (200k iterations, random per-account
+  salt) and stored in SQLite; nothing plaintext ever touches disk or logs.
+- **Quick match** — an ELO-window matchmaker (`server/matchmaking/`)
+  pairs waiting players by rating, widening the acceptable gap the longer
+  someone waits, with a starvation guard that eventually pairs anyone.
+- **Rooms & spectators** — a player can instead join a specific room id;
+  the first two participants play (White, then Black), everyone after
+  that is a read-only spectator who receives live state but can't move.
+- **Persistence** — finished games (both players, the winner, and each
+  player's ELO rating before/after) are recorded to SQLite
+  (`server/persistence/`), so `accounts.elo_rating` updates after every
+  game.
+- **Liveness, disconnect & reconnect** — a heartbeat exchange detects a
+  dropped connection; a disconnected player has a 20-second grace period
+  to reconnect (by username, from any connection) before being
+  auto-resigned.
+- **Everything on the wire is a typed, versioned record**
+  (`server/protocol/`) — commands, events, and a closed `ErrorCode` set —
+  never a raw dict, encoded/decoded in exactly one place.
+
+Layering (`server/transport` → `bus` → `handlers`/`matchmaking`/`rooms`
+→ `session` → the untouched engine) is enforced mechanically by
+`.importlinter`, the same way `kungfu_chess`'s independence from `ui`/
+`server` is.
+
+**Running it:**
 
 ```bash
-pip install pytest pytest-cov
+pip install -r requirements.txt
+python -m server.main
+```
+
+Listens on `ws://127.0.0.1:8765` by default; every tunable (host/port,
+tick/broadcast rate, heartbeat and disconnect-grace timing, ELO
+matchmaking window, room spectator cap, the SQLite file path, ...) is a
+`SERVER_*` environment variable read by `ServerConfig.from_env()` — see
+`server/config.py`.
+
+**Design docs:** [`docs/SERVER_PLAN.md`](docs/SERVER_PLAN.md) (core
+transport/session/protocol design), [`docs/ROOMS_PLAN.md`](docs/ROOMS_PLAN.md)
+(rooms & spectators), [`docs/SQLITE_PERSISTENCE_PLAN.md`](docs/SQLITE_PERSISTENCE_PLAN.md)
+(accounts/passwords/ELO/game history). All three are implemented and
+live in `server/main.py`'s wiring, not just proposals.
+
+**Not yet built:** a client. `ui/net/` is currently an empty placeholder
+package — `python -m ui.main` still only drives a fully local, in-process
+engine. The networked UI client (background WebSocket thread, clock
+rebasing, a pre-game room/login dialog) is designed in
+[`docs/UI_NET_PLAN.md`](docs/UI_NET_PLAN.md) but not implemented; the
+current way to exercise the server end-to-end is
+`tests/server/test_e2e.py`, which drives it with a real `websockets`
+client.
+
+**Tests:** `pytest tests/server -v` — codec round-trips, config
+validation, rate limiting, ELO matchmaking, rooms/spectators, SQLite
+repositories (against a real `:memory:` database), disconnect/reconnect,
+and one full end-to-end test over a real socket.
+
+## Getting started
+
+Requires Python 3.10+ (developed against 3.14). All dependencies for the
+engine, UI, server, and test suite are listed in `requirements.txt`
+(`pytest`, `pytest-cov`, `websockets`, `import-linter`):
+
+```bash
+pip install -r requirements.txt
 ```
 
 Run a scripted game from the command line:
@@ -352,3 +451,13 @@ pytest --cov=kungfu_chess --cov=main --cov-report=term-missing --cov-report=html
 - `tests/test_main_pipeline.py` — exercises `main.py`'s stdin/stdout
   protocol end-to-end (parsing errors, moves, jumps, waits, malformed
   commands, and the `python main.py` script entry point).
+- `tests/server/` — the `server/` package's own suite (see
+  [Server](#server) above); run it on its own with `pytest tests/server`.
+- `ui/tests/` — the UI's own suite; see
+  [`docs/README.md`](docs/README.md#test-gates).
+
+Layering is checked mechanically, not just by convention — run
+`lint-imports` (config in `.importlinter`) to confirm `kungfu_chess`
+never depends on `ui`/`server`, `server`'s internal layers stay one-way,
+and the offline text-protocol path (`main.py`, `texttests/`) never grows
+a dependency on `server`/`websockets`.
